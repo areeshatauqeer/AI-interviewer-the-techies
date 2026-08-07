@@ -1,18 +1,18 @@
-const API = "http://127.0.0.1:8000/api/interview";
-const CANDIDATE_ID = "CAND-003";
+const API = "/api/interview";
 const MIN_QUESTIONS = 8;
 
 let conversation = [];
-let totalQuestions = MIN_QUESTIONS;
+let sessionId = null;
+let currentCandidate = "CAND-003";
 
 function updateProgress(current) {
     const chip = document.getElementById("progress");
     if (chip) {
-        chip.textContent = `Question ${Math.min(current, totalQuestions)} / ${totalQuestions}`;
+        chip.textContent = `Question ${Math.min(current, MIN_QUESTIONS)} / ${MIN_QUESTIONS}`;
     }
 }
 
-function addAI(text) {
+function addAI(text, dayTitle) {
     const chat = document.getElementById("chat");
     const row = document.createElement("div");
     row.className = "message-row ai";
@@ -27,8 +27,9 @@ function addAI(text) {
 
     const bubble = document.createElement("div");
     bubble.className = "bubble";
+    const label = dayTitle ? `Interview Agent · ${dayTitle}` : "Interview Agent";
     bubble.innerHTML =
-        `<div class="msg-author">Interview Agent</div>${escapeHtml(text)}`;
+        `<div class="msg-author">${escapeHtml(label)}</div>${escapeHtml(text)}`;
 
     row.appendChild(avatar);
     row.appendChild(bubble);
@@ -99,36 +100,52 @@ function setBusy(busy) {
     if (box) box.disabled = busy;
 }
 
+function renderFeedback(feedback) {
+    const lines = [
+        "Interview Complete",
+        "",
+        `Overall Score: ${feedback.overall_score}/100`,
+        "",
+        "Summary:",
+        feedback.summary,
+        "",
+        "Strengths:",
+        ...feedback.strengths.map((s) => `• ${s}`),
+        "",
+        "Improvements:",
+        ...feedback.improvements.map((i) => `• ${i}`)
+    ];
+    addAI(lines.join("\n"));
+    document.getElementById("progress").textContent = "Completed";
+}
+
 async function ask(payload) {
     setBusy(true);
     addTyping();
 
-    const response = await fetch(API, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-    });
-
-    const data = await response.json();
+    let data;
+    try {
+        const response = await fetch(API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        data = await response.json();
+    } catch (err) {
+        removeTyping();
+        setBusy(false);
+        alert("Connection error: " + err.message);
+        return null;
+    }
 
     removeTyping();
     setBusy(false);
 
+    sessionId = data.session_id || sessionId;
+
     if (data.status === "COMPLETED") {
-        const f = data.feedback;
-        const lines = [
-            "Interview Complete",
-            "",
-            `Overall Score: ${f.overall_score}/100`,
-            "",
-            "Strengths:",
-            ...f.strengths.map((s) => `• ${s}`),
-            "",
-            "Improvements:",
-            ...f.improvements.map((i) => `• ${i}`)
-        ];
-        addAI(lines.join("\n"));
-        document.getElementById("progress").textContent = "Completed";
+        renderFeedback(data.feedback);
         return data;
     }
 
@@ -136,7 +153,7 @@ async function ask(payload) {
         updateProgress(data.question_number);
     }
 
-    addAI(data.question);
+    addAI(data.question, data.day_title);
 
     conversation.push({
         role: "assistant",
@@ -147,17 +164,22 @@ async function ask(payload) {
 }
 
 async function startInterview() {
+    currentCandidate = document.getElementById("candidate-select").value || currentCandidate;
     conversation = [];
+    sessionId = null;
+
     document.getElementById("chat").innerHTML = "";
     document.getElementById("answer").value = "";
+    document.getElementById("answer").focus();
+
     updateProgress(1);
 
     const data = await ask({
-        candidate_id: CANDIDATE_ID,
+        candidate_id: currentCandidate,
         conversation: []
     });
 
-    if (data.question) {
+    if (data && data.question) {
         conversation.push({
             role: "assistant",
             content: data.question
@@ -178,12 +200,36 @@ async function sendAnswer() {
     });
 
     await ask({
-        candidate_id: CANDIDATE_ID,
+        candidate_id: currentCandidate,
+        session_id: sessionId,
         conversation
     });
 
     document.getElementById("answer").value = "";
     document.getElementById("answer").focus();
+}
+
+async function loadCandidates() {
+    const select = document.getElementById("candidate-select");
+
+    try {
+        const response = await fetch("/api/candidates");
+        const data = await response.json();
+
+        data.candidates.forEach((candidate) => {
+            const option = document.createElement("option");
+            option.value = candidate.id;
+            option.textContent = `${candidate.name} — ${candidate.role}`;
+            select.appendChild(option);
+        });
+    } catch (err) {
+        const option = document.createElement("option");
+        option.value = "CAND-003";
+        option.textContent = "Emily Chen — AI Engineer";
+        select.appendChild(option);
+    }
+
+    select.value = currentCandidate;
 }
 
 const answerBox = document.getElementById("answer");
@@ -199,4 +245,4 @@ answerBox.addEventListener("input", () => {
     answerBox.style.height = Math.min(answerBox.scrollHeight, 160) + "px";
 });
 
-startInterview();
+loadCandidates().then(() => startInterview());
