@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List
 import json
 import random
-import re
 
 app = FastAPI(title="ABTalks AI Interview Agent")
 
@@ -30,7 +30,6 @@ day_map = {
 MIN_QUESTIONS = 8
 MIN_CURRICULUM_DAYS = 4
 
-
 # ------------------------------------
 # Models
 # ------------------------------------
@@ -46,7 +45,7 @@ class InterviewRequest(BaseModel):
 
 
 # ------------------------------------
-# Candidate Personalization
+# Candidate Logic
 # ------------------------------------
 
 def get_candidate(candidate_id):
@@ -62,19 +61,14 @@ def get_candidate(candidate_id):
 
 
 def completed_days(candidate):
-
     days = []
 
     for mission in candidate["missions"]:
-
         if mission.get("passed"):
-
-            days.append(
-                {
-                    "day": mission["day"],
-                    "attempts": mission.get("attempts", 1)
-                }
-            )
+            days.append({
+                "day": mission["day"],
+                "attempts": mission.get("attempts", 1)
+            })
 
     return days
 
@@ -122,14 +116,11 @@ def build_plan(candidate):
 
     chosen = list(dict.fromkeys(chosen))
 
-    if len(chosen) < MIN_CURRICULUM_DAYS:
-        chosen = chosen[:]
-
     return chosen
 
 
 # ------------------------------------
-# Question Generation
+# AI Interview Questions
 # ------------------------------------
 
 def create_question(day_info, candidate):
@@ -141,8 +132,10 @@ def create_question(day_info, candidate):
     role = candidate["member"]["jobRole"]
 
     return (
-        f"As a {role}, explain how you would "
-        f"apply this objective in a real project:\n\n"
+        f"Let's explore a real-world engineering scenario.\n\n"
+        f"Based on your background as a {role}, "
+        f"walk me through how you would design, implement, "
+        f"or justify the following objective in production.\n\n"
         f"{objective}"
     )
 
@@ -151,14 +144,12 @@ def create_followup(previous_question, answer):
 
     answer = answer.lower()
 
-    short_answer = len(answer.split()) < 15
-
-    if short_answer:
+    if len(answer.split()) < 15:
 
         return (
-            "Can you go deeper and describe "
-            "the implementation details, tradeoffs, "
-            "and challenges?"
+            "I'd like to understand your thinking in more depth.\n\n"
+            "Can you discuss the implementation approach, "
+            "tradeoffs, and technical challenges involved?"
         )
 
     keywords = [
@@ -167,30 +158,30 @@ def create_followup(previous_question, answer):
         "vector",
         "agent",
         "prompt",
-        "deployment"
+        "deployment",
+        "security"
     ]
 
-    found = []
+    for keyword in keywords:
 
-    for k in keywords:
-        if k in answer:
-            found.append(k)
+        if keyword in answer:
 
-    if found:
-        return (
-            f"You mentioned {found[0]}. "
-            f"What failure modes exist and "
-            f"how would you mitigate them?"
-        )
+            return (
+                f"Interesting. You mentioned {keyword}.\n\n"
+                f"Imagine this system is already running in production.\n\n"
+                f"What failure modes would you expect, "
+                f"and how would you mitigate them?"
+            )
 
     return (
-        "What alternative solution would you choose "
-        "and why?"
+        "That's a reasonable approach.\n\n"
+        "Can you propose an alternative architecture or design "
+        "and explain why you might choose it?"
     )
 
 
 # ------------------------------------
-# Conversation Parsing
+# Conversation Helpers
 # ------------------------------------
 
 def assistant_questions(conversation):
@@ -212,19 +203,19 @@ def user_answers(conversation):
 
 
 # ------------------------------------
-# Evaluation
+# Feedback Engine
 # ------------------------------------
 
 def score_answer(answer):
 
-    tokens = len(answer.split())
-
     score = 0
 
-    if tokens > 20:
+    words = len(answer.split())
+
+    if words > 20:
         score += 30
 
-    if tokens > 50:
+    if words > 50:
         score += 20
 
     keywords = [
@@ -241,7 +232,8 @@ def score_answer(answer):
     ]
 
     matches = sum(
-        1 for k in keywords
+        1
+        for k in keywords
         if k in answer.lower()
     )
 
@@ -262,7 +254,6 @@ def generate_feedback(candidate, answers):
     )
 
     strengths = []
-
     improvements = []
 
     if avg >= 80:
@@ -282,7 +273,7 @@ def generate_feedback(candidate, answers):
 
     if avg < 80:
         improvements.append(
-            "Discuss tradeoffs and architecture choices more explicitly"
+            "Discuss architecture choices and tradeoffs more explicitly"
         )
 
     return {
@@ -291,12 +282,12 @@ def generate_feedback(candidate, answers):
         "strengths": strengths,
         "improvements": improvements,
         "summary":
-            "Interview completed successfully."
+        "Interview completed successfully."
     }
 
 
 # ------------------------------------
-# Endpoint
+# API Endpoint
 # ------------------------------------
 
 @app.post("/api/interview")
@@ -330,8 +321,6 @@ def interview(req: InterviewRequest):
             plan[idx]
         )
 
-    # completion criteria
-
     if (
         asked_count >= MIN_QUESTIONS and
         len(set(covered_days))
@@ -346,10 +335,7 @@ def interview(req: InterviewRequest):
                 )
         }
 
-    # followup logic
-
     if len(answers) < len(questions):
-
         return {
             "status": "WAITING_FOR_ANSWER"
         }
@@ -369,13 +355,13 @@ def interview(req: InterviewRequest):
             return {
                 "status": "IN_PROGRESS",
                 "question_number":
-                    asked_count + 1,
+                asked_count + 1,
                 "question": followup,
                 "covered_days":
-                    covered_days,
+                covered_days,
                 "remaining_questions":
-                    MIN_QUESTIONS -
-                    asked_count
+                MIN_QUESTIONS -
+                asked_count
             }
 
     day_index = min(
@@ -393,12 +379,25 @@ def interview(req: InterviewRequest):
     return {
         "status": "IN_PROGRESS",
         "question_number":
-            asked_count + 1,
+        asked_count + 1,
         "question": question,
         "covered_days":
-            covered_days +
-            [selected_day],
+        covered_days + [selected_day],
         "remaining_questions":
-            MIN_QUESTIONS -
-            asked_count - 1
+        MIN_QUESTIONS -
+        asked_count - 1
     }
+
+
+# ------------------------------------
+# Serve Frontend
+# ------------------------------------
+
+app.mount(
+    "/",
+    StaticFiles(
+        directory="frontend",
+        html=True
+    ),
+    name="frontend"
+)
