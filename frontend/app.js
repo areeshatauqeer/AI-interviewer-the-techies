@@ -6,6 +6,12 @@ const INTRO_TEXT = "Hi, I'm Shay. I will be interviewing you today!";
 let conversation = [];
 let sessionId = null;
 let currentCandidate = "CAND-003";
+let voiceMode = false;
+let recognition = null;
+let listening = false;
+let voiceBusy = false;
+let voiceToken = 0;
+let lastQuestionText = null;
 
 function updateProgress(current) {
     const chip = document.getElementById("progress");
@@ -36,6 +42,7 @@ function addAI(text, dayTitle) {
     row.appendChild(avatar);
     row.appendChild(bubble);
     chat.appendChild(row);
+    lastQuestionText = text;
     scrollToBottom();
 }
 
@@ -102,6 +109,232 @@ function setBusy(busy) {
     if (box) box.disabled = busy;
 }
 
+function mountShay() {
+    const template = document.getElementById("shay-svg-template");
+    if (!template) return;
+    const introTarget = document.getElementById("shay-avatar");
+    const liveTarget = document.querySelector(".shay-live-avatar");
+    if (introTarget) introTarget.appendChild(template.content.cloneNode(true));
+    if (liveTarget) liveTarget.appendChild(template.content.cloneNode(true));
+    if ("speechSynthesis" in window) {
+        speechSynthesis.getVoices();
+        speechSynthesis.addEventListener?.("voiceschanged", () => speechSynthesis.getVoices());
+    }
+}
+
+// ---------------- Voice interaction ----------------
+
+function initRecognition() {
+    if (recognition) return true;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return false;
+    recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    return true;
+}
+
+function pickVoice() {
+    if (!("speechSynthesis" in window)) return null;
+    const voices = speechSynthesis.getVoices();
+    const english = voices.filter((v) =>
+        v.lang && v.lang.toLowerCase().startsWith("en")
+    );
+    return (
+        english.find((v) =>
+            /female|woman|shay|samantha|zira|jenny|aria|serena|victoria|karen|moira|tessa/i.test(v.name)
+        ) ||
+        english.find((v) => v.default) ||
+        english[0] ||
+        null
+    );
+}
+
+function speak(text) {
+    return new Promise((resolve) => {
+        if (!("speechSynthesis" in window)) {
+            resolve();
+            return;
+        }
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "en-US";
+        const voice = pickVoice();
+        if (voice) utterance.voice = voice;
+        utterance.rate = 1;
+        utterance.pitch = 1.05;
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve();
+        speechSynthesis.cancel();
+        speechSynthesis.speak(utterance);
+        setTimeout(resolve, Math.max(12000, text.length * 90));
+    });
+}
+
+function listenOnce() {
+    return new Promise((resolve) => {
+        if (!recognition || listening) {
+            resolve(null);
+            return;
+        }
+        listening = true;
+        let done = false;
+        const finish = (text) => {
+            if (done) return;
+            done = true;
+            listening = false;
+            resolve(text);
+        };
+        recognition.onresult = (event) => {
+            const result = event.results[0];
+            finish(result && result[0] ? result[0].transcript.trim() : null);
+        };
+        recognition.onerror = () => finish(null);
+        recognition.onend = () => finish(null);
+        try {
+            recognition.start();
+        } catch (err) {
+            finish(null);
+        }
+    });
+}
+
+function setVoiceState(state) {
+    const status = document.getElementById("voice-status");
+    const hint = document.getElementById("voice-hint");
+    const panel = document.getElementById("voice-panel");
+    const mic = document.getElementById("mic-btn");
+    const dock = document.getElementById("voice-dock");
+    const badge = document.getElementById("shay-live-badge");
+
+    if (panel) panel.dataset.state = state;
+    if (status) {
+        status.textContent =
+            state === "speaking"
+                ? "Shay is speaking…"
+                : state === "listening"
+                    ? "Listening… speak your answer"
+                    : "Tap the mic and speak";
+    }
+    if (hint) hint.textContent = state === "speaking" ? "Hold on a moment…" : "Tap the mic and speak your answer";
+    if (mic) mic.classList.toggle("recording", state === "listening");
+    if (dock) {
+        dock.classList.toggle("speaking", state === "speaking");
+        dock.classList.toggle("listening", state === "listening");
+    }
+    if (badge) {
+        badge.textContent =
+            state === "speaking"
+                ? "Speaking"
+                : state === "listening"
+                    ? "Listening"
+                    : "Ready";
+    }
+}
+
+function cancelVoiceActivity() {
+    voiceToken++;
+    if (recognition) {
+        try { recognition.abort(); } catch (err) { /* noop */ }
+    }
+    if ("speechSynthesis" in window) {
+        speechSynthesis.cancel();
+    }
+    listening = false;
+    voiceBusy = false;
+}
+
+function warmUpMicrophone() {
+    if (!recognition) return;
+    try {
+        recognition.start();
+    } catch (err) {
+        return;
+    }
+    setTimeout(() => {
+        try { recognition.abort(); } catch (err) { /* noop */ }
+    }, 800);
+}
+
+function toggleVoiceMode() {
+    const toggle = document.getElementById("voice-toggle");
+    const live = document.getElementById("shay-live");
+    const panel = document.getElementById("voice-panel");
+    const composer = document.getElementById("composer-input");
+    const hint = document.getElementById("composer-hint");
+
+    if (!voiceMode) {
+        if (!initRecognition()) {
+            alert("Voice mode needs Chrome or Edge (Web Speech API). Falling back to text.");
+            return;
+        }
+        voiceMode = true;
+        toggle.classList.add("active");
+        toggle.setAttribute("aria-pressed", "true");
+        live.hidden = false;
+        panel.hidden = false;
+        composer.hidden = true;
+        hint.hidden = true;
+        setVoiceState("idle");
+        warmUpMicrophone();
+        if (lastQuestionText) {
+            voiceTurn(lastQuestionText);
+        }
+    } else {
+        voiceMode = false;
+        cancelVoiceActivity();
+        toggle.classList.remove("active");
+        toggle.setAttribute("aria-pressed", "false");
+        live.hidden = true;
+        panel.hidden = true;
+        composer.hidden = false;
+        hint.hidden = false;
+        setVoiceState("idle");
+        const box = document.getElementById("answer");
+        if (box) box.focus();
+    }
+}
+
+async function answerByVoice() {
+    if (!voiceMode || voiceBusy || listening) return;
+    voiceBusy = true;
+    const token = voiceToken;
+    setVoiceState("listening");
+    const transcript = await listenOnce();
+    if (token !== voiceToken || !voiceMode) return;
+    setVoiceState("idle");
+    voiceBusy = false;
+    if (transcript) {
+        await sendAnswer(transcript);
+    }
+}
+
+function voiceTurn(question) {
+    if (!voiceMode || voiceBusy) return;
+    voiceBusy = true;
+    const token = voiceToken;
+
+    (async () => {
+        setVoiceState("speaking");
+        await speak(question);
+        if (token !== voiceToken || !voiceMode) {
+            voiceBusy = false;
+            return;
+        }
+        setVoiceState("listening");
+        const transcript = await listenOnce();
+        if (token !== voiceToken || !voiceMode) {
+            voiceBusy = false;
+            return;
+        }
+        setVoiceState("idle");
+        voiceBusy = false;
+        if (transcript) {
+            await sendAnswer(transcript);
+        }
+    })();
+}
+
 function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -126,6 +359,10 @@ async function playIntro() {
     });
 
     await wait(700);
+
+    if (voiceMode) {
+        speak(INTRO_TEXT);
+    }
 
     await typeText(textEl, INTRO_TEXT, 38);
     await wait(1000);
@@ -156,6 +393,11 @@ function renderFeedback(feedback) {
     ];
     addAI(lines.join("\n"));
     document.getElementById("progress").textContent = "Completed";
+
+    if (voiceMode) {
+        setVoiceState("speaking");
+        speak("That's the end of your interview, thank you for your time!");
+    }
 }
 
 async function ask(payload) {
@@ -199,6 +441,10 @@ async function ask(payload) {
         content: data.question
     });
 
+    if (voiceMode) {
+        voiceTurn(data.question);
+    }
+
     return data;
 }
 
@@ -207,6 +453,7 @@ async function startInterview() {
     conversation = [];
     sessionId = null;
 
+    cancelVoiceActivity();
     setBusy(true);
     await playIntro();
     setBusy(false);
@@ -230,8 +477,11 @@ async function startInterview() {
     }
 }
 
-async function sendAnswer() {
-    const answer = document.getElementById("answer").value.trim();
+async function sendAnswer(text) {
+    const fromText = text === undefined || text === null;
+    const answer = fromText
+        ? document.getElementById("answer").value.trim()
+        : String(text).trim();
 
     if (!answer) return;
 
@@ -248,8 +498,10 @@ async function sendAnswer() {
         conversation
     });
 
-    document.getElementById("answer").value = "";
-    document.getElementById("answer").focus();
+    if (fromText) {
+        document.getElementById("answer").value = "";
+        document.getElementById("answer").focus();
+    }
 }
 
 async function loadCandidates() {
@@ -288,4 +540,5 @@ answerBox.addEventListener("input", () => {
     answerBox.style.height = Math.min(answerBox.scrollHeight, 160) + "px";
 });
 
+mountShay();
 loadCandidates().then(() => startInterview());

@@ -71,7 +71,7 @@
         </div>
 
         <div class="composer-wrap">
-            <div class="composer">
+            <div class="composer" id="composer-input">
                 <textarea
                     id="answer"
                     placeholder="Type your answer..."
@@ -82,7 +82,25 @@
                     </svg>
                 </button>
             </div>
-            <div class="composer-hint">
+            <div id="voice-panel" class="voice-panel" hidden>
+                <div class="voice-status" id="voice-status">Tap the mic and speak</div>
+                <div class="voice-controls">
+                    <button id="mic-btn" class="mic-btn" onclick="answerByVoice()" aria-label="Speak your answer">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="2" width="6" height="12" rx="3"/>
+                            <path d="M5 10v1a7 7 0 0 0 14 0v-1"/>
+                            <line x1="12" y1="19" x2="12" y2="22"/>
+                        </svg>
+                    </button>
+                    <div class="voice-bars" id="voice-bars" aria-hidden="true">
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                </div>
+                <div class="composer-hint" id="voice-hint">
+                    Tap the mic and speak your answer
+                </div>
+            </div>
+            <div class="composer-hint" id="composer-hint">
                 Shift + Enter to add a new line
             </div>
         </div>
@@ -91,34 +109,58 @@
 
 </div>
 
+<div id="voice-dock" class="voice-dock">
+    <div id="shay-live" class="shay-live" hidden>
+        <div class="shay-live-ring"></div>
+        <div class="shay-live-avatar"></div>
+        <div class="shay-live-badge" id="shay-live-badge">Ready</div>
+    </div>
+    <button
+        id="voice-toggle"
+        class="voice-toggle"
+        onclick="toggleVoiceMode()"
+        aria-pressed="false"
+        title="Toggle voice interview"
+    >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="2" width="6" height="12" rx="3"/>
+            <path d="M5 10v1a7 7 0 0 0 14 0v-1"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+        </svg>
+        <span>Voice</span>
+    </button>
+</div>
+
+<template id="shay-svg-template">
+    <svg viewBox="0 0 240 240" fill="none" aria-hidden="true">
+        <defs>
+            <linearGradient id="shayBg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#7c3aed"/>
+                <stop offset="100%" stop-color="#4f7cff"/>
+            </linearGradient>
+        </defs>
+        <circle cx="120" cy="120" r="120" fill="url(#shayBg)"/>
+        <path d="M40 240 L40 210 Q40 182 72 180 L104 180 L108 188 L132 188 L136 180 L168 180 Q200 182 200 210 L200 240 Z" fill="#efe6ff"/>
+        <rect x="108" y="150" width="24" height="50" rx="10" fill="#eab58f"/>
+        <path d="M120 18 C60 18 38 70 42 128 C45 160 50 186 60 206 L70 192 C63 165 60 150 62 130 C66 92 84 56 120 54 C156 56 174 92 178 130 C180 150 177 165 170 192 L180 206 C190 186 195 160 198 128 C202 70 180 18 120 18 Z" fill="#3a2a20"/>
+        <circle cx="120" cy="104" r="56" fill="#f6c9a9"/>
+        <path d="M64 74 C66 44 90 34 120 34 C150 34 174 44 176 74 C170 82 162 74 156 84 C151 74 142 78 136 88 C130 76 118 80 112 92 C105 80 92 82 86 94 C78 82 71 84 64 74 Z" fill="#3a2a20"/>
+        <ellipse cx="100" cy="116" rx="7.5" ry="9" fill="#2a1a10"/>
+        <ellipse cx="140" cy="116" rx="7.5" ry="9" fill="#2a1a10"/>
+        <circle cx="102" cy="112" r="2.6" fill="#fff"/>
+        <circle cx="142" cy="112" r="2.6" fill="#fff"/>
+        <path d="M92 102 Q100 98 108 102" stroke="#3a2a20" stroke-width="3" stroke-linecap="round"/>
+        <path d="M132 102 Q140 98 148 102" stroke="#3a2a20" stroke-width="3" stroke-linecap="round"/>
+        <ellipse cx="87" cy="130" rx="7" ry="4" fill="#f7a8b0" opacity="0.6"/>
+        <ellipse cx="153" cy="130" rx="7" ry="4" fill="#f7a8b0" opacity="0.6"/>
+        <path d="M108 132 Q120 146 132 132" stroke="#a13a2c" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+    </svg>
+</template>
+
 <div id="intro" class="intro" hidden>
     <div class="intro-backdrop"></div>
     <div class="intro-stage">
-        <div id="shay-avatar" class="intro-avatar">
-            <svg viewBox="0 0 240 240" fill="none" aria-hidden="true">
-                <defs>
-                    <linearGradient id="shayBg" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stop-color="#7c3aed"/>
-                        <stop offset="100%" stop-color="#4f7cff"/>
-                    </linearGradient>
-                </defs>
-                <circle cx="120" cy="120" r="120" fill="url(#shayBg)"/>
-                <path d="M40 240 L40 210 Q40 182 72 180 L104 180 L108 188 L132 188 L136 180 L168 180 Q200 182 200 210 L200 240 Z" fill="#efe6ff"/>
-                <rect x="108" y="150" width="24" height="50" rx="10" fill="#eab58f"/>
-                <path d="M120 18 C60 18 38 70 42 128 C45 160 50 186 60 206 L70 192 C63 165 60 150 62 130 C66 92 84 56 120 54 C156 56 174 92 178 130 C180 150 177 165 170 192 L180 206 C190 186 195 160 198 128 C202 70 180 18 120 18 Z" fill="#3a2a20"/>
-                <circle cx="120" cy="104" r="56" fill="#f6c9a9"/>
-                <path d="M64 74 C66 44 90 34 120 34 C150 34 174 44 176 74 C170 82 162 74 156 84 C151 74 142 78 136 88 C130 76 118 80 112 92 C105 80 92 82 86 94 C78 82 71 84 64 74 Z" fill="#3a2a20"/>
-                <ellipse cx="100" cy="116" rx="7.5" ry="9" fill="#2a1a10"/>
-                <ellipse cx="140" cy="116" rx="7.5" ry="9" fill="#2a1a10"/>
-                <circle cx="102" cy="112" r="2.6" fill="#fff"/>
-                <circle cx="142" cy="112" r="2.6" fill="#fff"/>
-                <path d="M92 102 Q100 98 108 102" stroke="#3a2a20" stroke-width="3" stroke-linecap="round"/>
-                <path d="M132 102 Q140 98 148 102" stroke="#3a2a20" stroke-width="3" stroke-linecap="round"/>
-                <ellipse cx="87" cy="130" rx="7" ry="4" fill="#f7a8b0" opacity="0.6"/>
-                <ellipse cx="153" cy="130" rx="7" ry="4" fill="#f7a8b0" opacity="0.6"/>
-                <path d="M108 132 Q120 146 132 132" stroke="#a13a2c" stroke-width="3.5" stroke-linecap="round" fill="none"/>
-            </svg>
-        </div>
+        <div id="shay-avatar" class="intro-avatar"></div>
         <div id="intro-bubble" class="intro-bubble">
             <span id="intro-text"></span>
         </div>
