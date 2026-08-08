@@ -19,6 +19,15 @@
             New interview
         </button>
 
+        <a class="new-chat voice-nav" href="/voice.html" title="Open the face-to-face voice interview">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="2" width="6" height="12" rx="3"/>
+                <path d="M5 10v1a7 7 0 0 0 14 0v-1"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+            Voice interview
+        </a>
+
         <div class="candidate-picker">
             <label for="candidate-select">Candidate</label>
             <select id="candidate-select"></select>
@@ -82,24 +91,6 @@
                     </svg>
                 </button>
             </div>
-            <div id="voice-panel" class="voice-panel" hidden>
-                <div class="voice-status" id="voice-status">Tap the mic and speak</div>
-                <div class="voice-controls">
-                    <button id="mic-btn" class="mic-btn" onclick="answerByVoice()" aria-label="Speak your answer">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="9" y="2" width="6" height="12" rx="3"/>
-                            <path d="M5 10v1a7 7 0 0 0 14 0v-1"/>
-                            <line x1="12" y1="19" x2="12" y2="22"/>
-                        </svg>
-                    </button>
-                    <div class="voice-bars" id="voice-bars" aria-hidden="true">
-                        <span></span><span></span><span></span><span></span><span></span>
-                    </div>
-                </div>
-                <div class="composer-hint" id="voice-hint">
-                    Tap the mic and speak your answer
-                </div>
-            </div>
             <div class="composer-hint" id="composer-hint">
                 Shift + Enter to add a new line
             </div>
@@ -107,33 +98,6 @@
 
     </main>
 
-</div>
-
-<div id="voice-dock" class="voice-dock">
-    <div id="shay-live" class="shay-live" hidden>
-        <div class="shay-live-ring"></div>
-        <div class="shay-live-avatar"></div>
-        <div class="shay-live-badge" id="shay-live-badge">Ready</div>
-    </div>
-    <button
-        id="voice-toggle"
-        class="voice-toggle"
-        onclick="toggleVoiceMode()"
-        aria-pressed="false"
-        title="Toggle voice interview"
-    >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="9" y="2" width="6" height="12" rx="3"/>
-            <path d="M5 10v1a7 7 0 0 0 14 0v-1"/>
-            <line x1="12" y1="19" x2="12" y2="22"/>
-        </svg>
-        <span>Voice</span>
-    </button>
-</div>
-
-<div id="shay-speaking" class="shay-speaking">
-    <div class="shay-speaking-avatar"></div>
-    <div class="shay-speaking-label">Shay is speaking…</div>
 </div>
 
 <template id="shay-svg-template">

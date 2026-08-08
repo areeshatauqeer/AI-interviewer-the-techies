@@ -17,6 +17,18 @@ python -m uvicorn app:app --port 8000
 
 Open http://127.0.0.1:8000
 
+## Two interview environments
+
+- **Chatbot (text)** — http://127.0.0.1:8000 — the classic chat UI. Shay greets
+  the candidate with a short intro, then runs the interview as chat bubbles.
+- **Voice (face-to-face)** — http://127.0.0.1:8000/voice.html — Shay walks in,
+  sits across from the candidate in an office scene, and conducts a hands-free
+  spoken interview. She reads questions aloud (human-paced, with sighs),
+  listens to answers via the Web Speech API, and shows a score ring on
+  completion. Requires Chrome or Edge.
+
+A "Voice interview" button in the chatbot's corner links to the voice room.
+
 ## How the agent works
 
 1. **Planner** — builds an ordered interview plan from the candidate's

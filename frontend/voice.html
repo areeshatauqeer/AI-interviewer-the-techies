@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shay · Face-to-Face Voice Interview</title>
+    <link rel="stylesheet" href="voice.css">
+</head>
+<body class="voice">
+
+<header class="voice-topbar">
+    <a class="back-link" href="/">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Chatbot
+    </a>
+    <div class="voice-title">
+        <span class="title-dot"></span> Shay · Face-to-Face Interview
+    </div>
+    <div class="voice-top-actions">
+        <button id="mic-btn" class="mic-btn" onclick="answerByVoice()" aria-label="Speak your answer">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="2" width="6" height="12" rx="3"/>
+                <path d="M5 10v1a7 7 0 0 0 14 0v-1"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+        </button>
+        <div class="voice-candidate">
+            <label for="candidate-select">Candidate</label>
+            <select id="candidate-select"></select>
+        </div>
+    </div>
+</header>
+
+<main id="scene" class="scene">
+
+    <div class="wall">
+        <div class="window">
+            <div class="sky"><span class="sun"></span><span class="cloud"></span></div>
+            <div class="horizon"></div>
+            <span class="frame-v"></span>
+            <span class="frame-h"></span>
+        </div>
+        <div class="shelf">
+            <i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div class="plant">
+            <svg viewBox="0 0 80 120" aria-hidden="true">
+                <rect x="28" y="82" width="24" height="30" rx="4" fill="#b4703e"/>
+                <path d="M40 82 C20 60 16 34 30 16 C44 34 40 54 40 82 Z" fill="#2f9e63"/>
+                <path d="M40 82 C60 60 64 34 50 16 C36 34 40 54 40 82 Z" fill="#3cb371"/>
+                <path d="M40 86 C40 66 40 48 40 34" stroke="#2f9e63" stroke-width="3" fill="none"/>
+            </svg>
+        </div>
+    </div>
+
+    <div class="floor">
+        <div class="rug"></div>
+    </div>
+
+    <div class="table">
+        <div class="table-top"></div>
+        <div class="table-leg leg-l"></div>
+        <div class="table-leg leg-r"></div>
+        <div class="table-lamp">
+            <div class="lamp-head"></div>
+            <div class="lamp-pole"></div>
+            <div class="lamp-base"></div>
+        </div>
+    </div>
+
+    <div class="seat seat-shay" id="seat-shay">
+        <div class="shay-talk" id="shay-talk"><span></span><span></span><span></span></div>
+        <div class="char">
+            <svg viewBox="0 0 240 300" fill="none" aria-hidden="true">
+                <rect x="72" y="26" width="96" height="150" rx="16" fill="#2b2440"/>
+                <rect x="58" y="176" width="124" height="24" rx="12" fill="#2b2440"/>
+                <rect x="78" y="200" width="10" height="66" rx="4" fill="#3a3355"/>
+                <rect x="152" y="200" width="10" height="66" rx="4" fill="#3a3355"/>
+                <rect x="116" y="200" width="8" height="72" rx="4" fill="#3a3355"/>
+                <ellipse cx="120" cy="278" rx="46" ry="9" fill="#1c1730"/>
+                <circle cx="120" cy="92" r="50" fill="#3a2a20"/>
+                <rect x="110" y="118" width="20" height="28" rx="8" fill="#eab58f"/>
+                <path d="M96 132 Q88 150 90 168 L92 186 Q100 196 120 196 Q140 196 148 186 L150 168 Q152 150 144 132 Q132 124 120 124 Q108 124 96 132 Z" fill="#efe6ff"/>
+                <rect x="90" y="130" width="17" height="52" rx="8" transform="rotate(9 98 155)" fill="#efe6ff"/>
+                <rect x="133" y="130" width="17" height="52" rx="8" transform="rotate(-9 141 155)" fill="#efe6ff"/>
+                <circle cx="97" cy="182" r="7" fill="#f6c9a9"/>
+                <circle cx="143" cy="182" r="7" fill="#f6c9a9"/>
+                <circle cx="120" cy="92" r="42" fill="#f6c9a9"/>
+                <path d="M78 66 Q80 42 104 34 Q120 30 136 34 Q160 42 162 66 Q156 74 150 70 Q146 76 140 72 Q134 80 126 76 Q120 84 112 78 Q104 84 98 76 Q92 82 88 74 Q82 76 78 66 Z" fill="#3a2a20"/>
+                <ellipse cx="104" cy="96" rx="5.5" ry="7" fill="#2a1a10"/>
+                <ellipse cx="136" cy="96" rx="5.5" ry="7" fill="#2a1a10"/>
+                <circle cx="106" cy="93" r="2" fill="#fff"/>
+                <circle cx="138" cy="93" r="2" fill="#fff"/>
+                <path d="M96 85 Q104 81 112 85" stroke="#3a2a20" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M128 85 Q136 81 144 85" stroke="#3a2a20" stroke-width="2.5" stroke-linecap="round"/>
+                <ellipse cx="92" cy="106" rx="5.5" ry="3.2" fill="#f7a8b0" opacity="0.6"/>
+                <ellipse cx="148" cy="106" rx="5.5" ry="3.2" fill="#f7a8b0" opacity="0.6"/>
+                <path d="M112 108 Q120 116 128 108" stroke="#a13a2c" stroke-width="3" stroke-linecap="round" fill="none"/>
+                <rect x="100" y="188" width="40" height="24" rx="8" fill="#3a2f6b"/>
+                <rect x="104" y="210" width="13" height="38" rx="6" fill="#eab58f"/>
+                <rect x="123" y="210" width="13" height="38" rx="6" fill="#eab58f"/>
+                <rect x="100" y="246" width="20" height="11" rx="5" fill="#43385e"/>
+                <rect x="120" y="246" width="20" height="11" rx="5" fill="#43385e"/>
+            </svg>
+        </div>
+        <div class="seat-tag"><span class="tag-dot"></span>Shay · AI Interviewer</div>
+        <div class="seat-status" id="seat-status">Waiting</div>
+    </div>
+
+</main>
+
+<div class="voice-hud">
+    <div class="subtitle" id="subtitle">…</div>
+    <div class="hud-controls">
+        <button id="replay-btn" class="ghost-btn" onclick="replayQuestion()" title="Replay question" aria-label="Replay question">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+        </button>
+        <button id="restart-btn" class="ghost-btn" onclick="startVoiceInterview()" title="New interview" aria-label="New interview">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+        </button>
+        <div id="progress" class="hud-progress">Question 1 / 8</div>
+    </div>
+</div>
+
+<div id="completion" class="completion" hidden>
+    <div class="completion-card">
+        <div class="comp-donut">
+            <svg viewBox="0 0 120 120" width="150" height="150" aria-hidden="true">
+                <circle cx="60" cy="60" r="52" class="comp-ring-track"/>
+                <circle cx="60" cy="60" r="52" class="comp-ring-fill" id="comp-ring-fill"/>
+            </svg>
+            <div class="comp-center">
+                <span class="comp-num" id="comp-num">0</span>
+                <span class="comp-unit">/ 100</span>
+            </div>
+        </div>
+        <h2 class="comp-title">Interview Complete</h2>
+        <p class="comp-name" id="comp-name"></p>
+        <p class="comp-sub">Thank you for speaking with Shay today.</p>
+        <div class="comp-actions">
+            <button class="comp-btn" onclick="startVoiceInterview()">Start again</button>
+            <a class="back-link comp-link" href="/">Back to chatbot</a>
+        </div>
+    </div>
+</div>
+
+<script src="voice.js"></script>
+
+</body>
+</html>
