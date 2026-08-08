@@ -771,7 +771,6 @@ async function ask(payload) {
 }
 
 async function startInterview() {
-    currentCandidate = document.getElementById("candidate-select").value || currentCandidate;
     conversation = [];
     sessionId = null;
 
@@ -779,6 +778,29 @@ async function startInterview() {
     setBusy(true);
     await playIntro();
     setBusy(false);
+
+    showCandidateSelector();
+}
+
+function showCandidateSelector() {
+    const overlay = document.getElementById("candidate-selector");
+    overlay.hidden = false;
+    requestAnimationFrame(() => overlay.classList.add("active"));
+}
+
+function hideCandidateSelector() {
+    const overlay = document.getElementById("candidate-selector");
+    overlay.classList.remove("active");
+    setTimeout(() => {
+        overlay.hidden = true;
+    }, 250);
+}
+
+async function chooseCandidate(id) {
+    currentCandidate = id;
+    const select = document.getElementById("candidate-select");
+    if (select) select.value = id;
+    hideCandidateSelector();
 
     document.getElementById("chat").innerHTML = "";
     document.getElementById("answer").value = "";
@@ -828,25 +850,42 @@ async function sendAnswer(text) {
 
 async function loadCandidates() {
     const select = document.getElementById("candidate-select");
+    const list = document.getElementById("candidate-list");
 
+    let candidates;
     try {
         const response = await fetch("/api/candidates");
         const data = await response.json();
+        candidates = data.candidates;
+    } catch (err) {
+        candidates = [{ id: "CAND-003", name: "Emily Chen", role: "AI Engineer" }];
+    }
 
-        data.candidates.forEach((candidate) => {
+    candidates.forEach((candidate) => {
+        if (select) {
             const option = document.createElement("option");
             option.value = candidate.id;
             option.textContent = `${candidate.name} — ${candidate.role}`;
             select.appendChild(option);
-        });
-    } catch (err) {
-        const option = document.createElement("option");
-        option.value = "CAND-003";
-        option.textContent = "Emily Chen — AI Engineer";
-        select.appendChild(option);
-    }
+        }
+        if (list) {
+            const button = document.createElement("button");
+            button.className = "candidate-option";
+            button.innerHTML = `
+                <div class="candidate-avatar">${escapeHtml((candidate.name || "?").charAt(0).toUpperCase())}</div>
+                <div class="candidate-info">
+                    <div class="candidate-name">${escapeHtml(candidate.name)}</div>
+                    <div class="candidate-role">${escapeHtml(candidate.role)}</div>
+                </div>
+                <svg class="candidate-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 18l6-6-6-6"/>
+                </svg>`;
+            button.addEventListener("click", () => chooseCandidate(candidate.id));
+            list.appendChild(button);
+        }
+    });
 
-    select.value = currentCandidate;
+    if (select) select.value = currentCandidate;
 }
 
 const answerBox = document.getElementById("answer");
