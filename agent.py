@@ -553,8 +553,21 @@ def generate_feedback(candidate, topics, covered_days):
     if llm.available():
         feedback = llm_feedback(candidate, topics)
         if feedback:
-            return feedback
-    return heuristic_feedback(candidate, topics, covered_days)
+            return enrich_topics(feedback)
+    return enrich_topics(heuristic_feedback(candidate, topics, covered_days))
+
+
+def enrich_topics(feedback):
+    topics_out = {}
+    for key, value in (feedback.get("topics") or {}).items():
+        day = int(str(key).split("_")[-1]) if str(key).rsplit("_", 1)[-1].isdigit() else None
+        title = day_map.get(day, {}).get("title", f"Day {day}") if day else str(key)
+        topics_out[key] = {
+            "title": title,
+            "score": int(value) if isinstance(value, (int, float, str)) else 50,
+        }
+    feedback["topics"] = topics_out
+    return feedback
 
 
 def llm_feedback(candidate, topics):

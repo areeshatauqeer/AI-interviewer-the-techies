@@ -11,6 +11,7 @@ let recognition = null;
 let listening = false;
 let voiceBusy = false;
 let voiceToken = 0;
+let speechToken = 0;
 let lastQuestionText = null;
 
 function updateProgress(current) {
@@ -114,8 +115,10 @@ function mountShay() {
     if (!template) return;
     const introTarget = document.getElementById("shay-avatar");
     const liveTarget = document.querySelector(".shay-live-avatar");
+    const speakingTarget = document.querySelector(".shay-speaking-avatar");
     if (introTarget) introTarget.appendChild(template.content.cloneNode(true));
     if (liveTarget) liveTarget.appendChild(template.content.cloneNode(true));
+    if (speakingTarget) speakingTarget.appendChild(template.content.cloneNode(true));
     if ("speechSynthesis" in window) {
         speechSynthesis.getVoices();
         speechSynthesis.addEventListener?.("voiceschanged", () => speechSynthesis.getVoices());
@@ -151,23 +154,108 @@ function pickVoice() {
     );
 }
 
+function playSigh({ duration = 1.0, strength = 0.5 } = {}) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        if (ctx.state === "suspended") ctx.resume();
+        const sampleRate = ctx.sampleRate;
+        const buffer = ctx.createBuffer(1, Math.floor(sampleRate * duration), sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = 680;
+        filter.Q.value = 0.7;
+        const gain = ctx.createGain();
+        const t0 = ctx.currentTime;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.05, strength), t0 + duration * 0.42);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        source.start(t0);
+        source.stop(t0 + duration + 0.05);
+        setTimeout(() => ctx.close().catch(() => {}), duration * 1000 + 300);
+    } catch (err) { /* audio unavailable */ }
+}
+
+function splitParagraphs(text) {
+    return String(text).split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
+}
+
+function splitChunks(text) {
+    const matches = String(text).match(/[^,;:!?.]+[,;:!?.]?/g) || [];
+    return matches.map((s) => s.trim()).filter(Boolean);
+}
+
+function pauseForChunk(chunk) {
+    const last = chunk.slice(-1);
+    if (last === "!" || last === "?") return 600 + Math.random() * 250;
+    if (last === ".") return 480 + Math.random() * 260;
+    if (last === ";" || last === ":") return 320 + Math.random() * 220;
+    if (last === ",") return 220 + Math.random() * 180;
+    return 130 + Math.random() * 140;
+}
+
 function speak(text) {
     return new Promise((resolve) => {
         if (!("speechSynthesis" in window)) {
             resolve();
             return;
         }
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "en-US";
+        const token = ++speechToken;
+        const paragraphs = splitParagraphs(text);
+        if (!paragraphs.length) {
+            resolve();
+            return;
+        }
         const voice = pickVoice();
-        if (voice) utterance.voice = voice;
-        utterance.rate = 1;
-        utterance.pitch = 1.05;
-        utterance.onend = () => resolve();
-        utterance.onerror = () => resolve();
         speechSynthesis.cancel();
-        speechSynthesis.speak(utterance);
-        setTimeout(resolve, Math.max(12000, text.length * 90));
+        playSigh({ duration: 1.0, strength: 0.5 });
+
+        (async () => {
+            await wait(300);
+            let chunkIndex = 0;
+            for (const paragraph of paragraphs) {
+                const chunks = splitChunks(paragraph);
+                for (let i = 0; i < chunks.length; i++) {
+                    if (token !== speechToken) {
+                        resolve();
+                        return;
+                    }
+                    const utterance = new SpeechSynthesisUtterance(chunks[i]);
+                    utterance.lang = "en-US";
+                    if (voice) utterance.voice = voice;
+                    utterance.rate = 0.83 + Math.random() * 0.06;
+                    utterance.pitch = 0.95 + Math.random() * 0.08;
+                    utterance.volume = 0.92 + Math.random() * 0.08;
+                    await new Promise((res) => {
+                        utterance.onend = res;
+                        utterance.onerror = res;
+                        speechSynthesis.speak(utterance);
+                        setTimeout(res, Math.max(4000, chunks[i].length * 115));
+                    });
+                    if (token !== speechToken) {
+                        resolve();
+                        return;
+                    }
+                    await wait(pauseForChunk(chunks[i]));
+                    chunkIndex++;
+                    if (chunkIndex % 7 === 3) {
+                        playSigh({ duration: 0.7, strength: 0.3 });
+                    }
+                }
+                await wait(700 + Math.random() * 400);
+            }
+            resolve();
+        })();
     });
 }
 
@@ -206,6 +294,7 @@ function setVoiceState(state) {
     const mic = document.getElementById("mic-btn");
     const dock = document.getElementById("voice-dock");
     const badge = document.getElementById("shay-live-badge");
+    const speaking = document.getElementById("shay-speaking");
 
     if (panel) panel.dataset.state = state;
     if (status) {
@@ -230,10 +319,14 @@ function setVoiceState(state) {
                     ? "Listening"
                     : "Ready";
     }
+    if (speaking) {
+        speaking.classList.toggle("visible", state === "speaking");
+    }
 }
 
 function cancelVoiceActivity() {
     voiceToken++;
+    speechToken++;
     if (recognition) {
         try { recognition.abort(); } catch (err) { /* noop */ }
     }
@@ -376,23 +469,154 @@ async function playIntro() {
     overlay.hidden = true;
 }
 
+function ringSVG(score, size, cls) {
+    const safe = Math.max(0, Math.min(100, Math.round(score)));
+    const r = Math.round(size * 0.34);
+    const c = 2 * Math.PI * r;
+    const color = safe >= 75 ? "#34d399" : safe >= 55 ? "#fbbf24" : "#f87171";
+    const target = (c * (1 - safe / 100)).toFixed(2);
+    return `
+        <svg class="ring-svg ring-${cls}" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
+            <circle class="ring-track" cx="${size / 2}" cy="${size / 2}" r="${r}"/>
+            <circle class="ring-fill" cx="${size / 2}" cy="${size / 2}" r="${r}"
+                stroke="${color}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${c.toFixed(2)}"
+                data-target="${target}"/>
+        </svg>`;
+}
+
+function buildFeedbackHTML(feedback) {
+    const score = Math.max(0, Math.min(100, Math.round(feedback.overall_score || 0)));
+    const topics = Object.values(feedback.topics || {});
+    const strengths = feedback.strengths || [];
+    const improvements = feedback.improvements || [];
+
+    const topicRows = topics
+        .map(
+            (t, i) => `
+            <div class="topic-row">
+                <div class="topic-ring">${ringSVG(t.score, 64, `topic-${i}`)}</div>
+                <div class="topic-meta">
+                    <div class="topic-title">${escapeHtml(t.title || "Topic")}</div>
+                    <div class="topic-score">${Math.round(t.score)}/100</div>
+                </div>
+            </div>`
+        )
+        .join("");
+
+    const strengthItems = strengths
+        .map(
+            (s) => `
+            <li>
+                <span class="fb-icon fb-icon-good">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                </span>
+                <span>${escapeHtml(s)}</span>
+            </li>`
+        )
+        .join("");
+
+    const improveItems = improvements
+        .map(
+            (s) => `
+            <li>
+                <span class="fb-icon fb-icon-warn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <polyline points="5 12 12 19 19 12"/>
+                    </svg>
+                </span>
+                <span>${escapeHtml(s)}</span>
+            </li>`
+        )
+        .join("");
+
+    return `
+        <div class="feedback-card">
+            <div class="feedback-head">
+                <div class="feedback-badge">Interview Complete</div>
+                <div class="feedback-candidate">${escapeHtml(feedback.candidate || "Candidate")}</div>
+            </div>
+            <div class="feedback-grid">
+                <div class="feedback-overall">
+                    <div class="donut">
+                        ${ringSVG(score, 150, "overall")}
+                        <div class="donut-center">
+                            <span class="donut-num">${score}</span>
+                            <span class="donut-unit">out of 100</span>
+                        </div>
+                    </div>
+                    <div class="feedback-overall-label">Overall Score</div>
+                </div>
+                ${
+                    topics.length
+                        ? `<div class="feedback-topics">
+                            <div class="feedback-section-title">Topic Breakdown</div>
+                            ${topicRows}
+                        </div>`
+                        : ""
+                }
+            </div>
+            <div class="feedback-summary">${escapeHtml(feedback.summary || "")}</div>
+            <div class="feedback-lists">
+                ${
+                    strengthItems
+                        ? `<div class="feedback-list fb-strengths">
+                            <div class="feedback-list-title">Strengths</div>
+                            <ul>${strengthItems}</ul>
+                        </div>`
+                        : ""
+                }
+                ${
+                    improveItems
+                        ? `<div class="feedback-list fb-improvements">
+                            <div class="feedback-list-title">Improvements</div>
+                            <ul>${improveItems}</ul>
+                        </div>`
+                        : ""
+                }
+            </div>
+        </div>`;
+}
+
+function animateRings(container) {
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            container.querySelectorAll(".ring-fill").forEach((el) => {
+                el.style.strokeDashoffset = el.dataset.target;
+            });
+        });
+    });
+}
+
+function addFeedbackCard(feedback) {
+    const chat = document.getElementById("chat");
+    const row = document.createElement("div");
+    row.className = "message-row ai";
+
+    const avatar = document.createElement("div");
+    avatar.className = "avatar avatar-ai";
+    avatar.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/>
+        </svg>`;
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble feedback-bubble";
+    bubble.innerHTML = buildFeedbackHTML(feedback);
+
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    chat.appendChild(row);
+    scrollToBottom();
+    animateRings(bubble);
+}
+
 function renderFeedback(feedback) {
-    const lines = [
-        "Interview Complete",
-        "",
-        `Overall Score: ${feedback.overall_score}/100`,
-        "",
-        "Summary:",
-        feedback.summary,
-        "",
-        "Strengths:",
-        ...feedback.strengths.map((s) => `• ${s}`),
-        "",
-        "Improvements:",
-        ...feedback.improvements.map((i) => `• ${i}`)
-    ];
-    addAI(lines.join("\n"));
     document.getElementById("progress").textContent = "Completed";
+    addFeedbackCard(feedback);
 
     if (voiceMode) {
         setVoiceState("speaking");

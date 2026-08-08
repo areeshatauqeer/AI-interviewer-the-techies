@@ -104,7 +104,7 @@ Completed (after ≥ 8 questions across ≥ 4 days):
     "strengths": ["..."],
     "improvements": ["..."],
     "summary": "...",
-    "topics": { "day_7": 88 }
+    "topics": { "day_7": { "title": "Prompt Engineering Fundamentals", "score": 88 } }
   }
 }
 ```
