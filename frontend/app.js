@@ -489,6 +489,8 @@ function buildFeedbackHTML(feedback) {
     const topics = Object.values(feedback.topics || {});
     const strengths = feedback.strengths || [];
     const improvements = feedback.improvements || [];
+    const rubric = feedback.rubric || [];
+    const scorecard = feedback.scorecard || [];
 
     const topicRows = topics
         .map(
@@ -532,6 +534,80 @@ function buildFeedbackHTML(feedback) {
         )
         .join("");
 
+    const borderline = feedback.borderline
+        ? `<div class="borderline-banner">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 9v4M12 17h.01"/>
+                    <path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+                </svg>
+                <div>
+                    <strong>Borderline result.</strong> Review the per-answer scorecard below to see exactly where points were awarded and why for each technical explanation.
+                </div>
+            </div>`
+        : "";
+
+    const rubricLegend = rubric.length
+        ? `<div class="rubric-legend">
+                <div class="feedback-section-title">Scoring Rubric</div>
+                ${rubric
+                    .map(
+                        (d) => `<div class="rubric-row">
+                            <div class="rubric-dot"></div>
+                            <div class="rubric-meta">
+                                <div class="rubric-title">${escapeHtml(d.label)} <span class="rubric-max">up to ${d.max} pts</span></div>
+                                <div class="rubric-desc">${escapeHtml(d.desc)}</div>
+                            </div>
+                        </div>`
+                    )
+                    .join("")}
+            </div>`
+        : "";
+
+    const scorecardHTML = scorecard.length
+        ? `<div class="feedback-scorecard">
+                <div class="feedback-section-title">Per-Answer Scorecard · Why Points Were Awarded</div>
+                ${scorecard
+                    .map(
+                        (entry, i) => `
+                        <details class="sc-entry" ${i === 0 ? "open" : ""}>
+                            <summary class="sc-head">
+                                <span class="sc-num">Q${i + 1}</span>
+                                <span class="sc-title">Day ${escapeHtml(entry.day)} · ${escapeHtml(entry.title || "Topic")} · ${escapeHtml(entry.mode || "")}</span>
+                                <span class="sc-total">${Math.round(entry.score)}</span>
+                            </summary>
+                            <div class="sc-body">
+                                <div class="sc-qa"><span class="sc-qa-label">Question</span><div>${escapeHtml(entry.question || "")}</div></div>
+                                <div class="sc-qa"><span class="sc-qa-label">Answer</span><div>${escapeHtml(entry.answer || "(no answer)")}</div></div>
+                                ${entry.comment ? `<div class="sc-comment">${escapeHtml(entry.comment)}</div>` : ""}
+                                <div class="sc-dims">
+                                    ${(entry.dimensions || [])
+                                        .map(
+                                            (d) => `
+                                            <div class="sc-dim">
+                                                <div class="sc-dim-top">
+                                                    <span class="sc-dim-label">${escapeHtml(d.label)}</span>
+                                                    <span class="sc-dim-score">${d.score}/${d.max}</span>
+                                                </div>
+                                                <div class="sc-bar"><i style="width:${Math.min(100, (d.score / d.max) * 100)}%"></i></div>
+                                                <div class="sc-dim-reason">${escapeHtml(d.reason || "")}</div>
+                                            </div>`
+                                        )
+                                        .join("")}
+                                </div>
+                            </div>
+                        </details>`
+                    )
+                    .join("")}
+            </div>`
+        : "";
+
+    const transcript = feedback.transcript
+        ? `<details class="transcript-box">
+                <summary>Full transcript</summary>
+                <pre>${escapeHtml(feedback.transcript)}</pre>
+            </details>`
+        : "";
+
     return `
         <div class="feedback-card">
             <div class="feedback-head">
@@ -547,7 +623,7 @@ function buildFeedbackHTML(feedback) {
                             <span class="donut-unit">out of 100</span>
                         </div>
                     </div>
-                    <div class="feedback-overall-label">Overall Score</div>
+                    <div class="feedback-overall-label">Overall Score · ${escapeHtml(feedback.verdict || "")}</div>
                 </div>
                 ${
                     topics.length
@@ -558,6 +634,7 @@ function buildFeedbackHTML(feedback) {
                         : ""
                 }
             </div>
+            ${borderline}
             <div class="feedback-summary">${escapeHtml(feedback.summary || "")}</div>
             <div class="feedback-lists">
                 ${
@@ -577,6 +654,9 @@ function buildFeedbackHTML(feedback) {
                         : ""
                 }
             </div>
+            ${rubricLegend}
+            ${scorecardHTML}
+            ${transcript}
         </div>`;
 }
 
@@ -614,9 +694,27 @@ function addFeedbackCard(feedback) {
     animateRings(bubble);
 }
 
+function openScoreboard(feedback) {
+    const card = document.getElementById("scoreboard-card");
+    card.innerHTML = buildFeedbackHTML(feedback);
+    animateRings(card);
+    const popup = document.getElementById("scoreboard-popup");
+    popup.hidden = false;
+    requestAnimationFrame(() => popup.classList.add("active"));
+}
+
+function closeScoreboard() {
+    const popup = document.getElementById("scoreboard-popup");
+    popup.classList.remove("active");
+    setTimeout(() => {
+        popup.hidden = true;
+    }, 300);
+}
+
 function renderFeedback(feedback) {
     document.getElementById("progress").textContent = "Completed";
     addFeedbackCard(feedback);
+    openScoreboard(feedback);
 
     if (voiceMode) {
         setVoiceState("speaking");

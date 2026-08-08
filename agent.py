@@ -511,74 +511,321 @@ def reconstruct_topics(candidate, conversation):
 SYSTEM_FEEDBACK = (
     "You are an expert interviewer coach. Given a transcript of a "
     "technical interview for the ABTalks AI Cohort, produce structured, "
-    "actionable feedback.\n"
-    'Return ONLY JSON: {"overall_score": <int 0-100>, "strengths": '
-    '["...", ...up to 4], "improvements": ["...", ...up to 5], '
-    '"summary": "1-2 sentences", "topics": {"day_7": <int>, ...}}\n'
-    "Base the score on technical depth, breadth across curriculum days, "
-    "clarity of explanation, and engineering judgment (tradeoffs, "
-    "evaluation, failure modes). Improvements must be specific and "
-    "actionable — reference concrete skills or habits to change. Do not "
-    "invent topics that were not covered."
+    "actionable feedback that a hiring manager can act on.\n\n"
+    "Each candidate answer was already scored against a rubric, and the "
+    "scorecard shows exactly how many points were awarded per dimension. "
+    "Use those scores as ground truth — do not contradict them.\n"
+    'Rubric dimensions: relevance (0-20), reasoning & tradeoffs (0-30), '
+    'concrete depth (0-20), production awareness (0-15), evaluation & '
+    'metrics (0-15).\n'
+    'Return ONLY JSON: {"strengths": ["...", ...up to 4], "improvements": '
+    '["...", ...up to 5], "summary": "1-2 sentences"}\n'
+    "Base strengths and improvements on scorecard evidence — quote what "
+    "the candidate actually said when useful. Improvements must be "
+    "specific and actionable — reference concrete skills or habits to "
+    "change. Do not invent topics that were not covered."
 )
 
+# Explainable rubric. Each dimension maps a candidate answer back to
+# observable signals so a hiring manager can see exactly why points were
+# awarded (or withheld) for a specific technical explanation.
+RUBRIC = [
+    {"key": "relevance", "label": "Relevance & coverage", "max": 20,
+     "desc": "Addresses the question and covers the day's tools and objectives."},
+    {"key": "reasoning", "label": "Reasoning & tradeoffs", "max": 30,
+     "desc": "Explains why, weighs tradeoffs and alternatives, shows engineering judgment."},
+    {"key": "depth", "label": "Concrete depth", "max": 20,
+     "desc": "Provides specific steps, implementation detail, and structure."},
+    {"key": "production", "label": "Production awareness", "max": 15,
+     "desc": "Considers failure modes, scaling, deployment, monitoring, security."},
+    {"key": "evaluation", "label": "Evaluation & metrics", "max": 15,
+     "desc": "References how to measure, test, benchmark, or baseline the solution."},
+]
+
+RUBRIC_MAX = sum(d["max"] for d in RUBRIC)
+
+REASONING_MARKERS = [
+    "because", "tradeoff", "however", "alternative", "would", "if",
+    "depends", "consider", "weigh", "versus", "instead", "but",
+    "compare", "justify", "decide",
+]
+
 DEPTH_MARKERS = [
-    "tradeoff", "latency", "failure", "because", "would", "scale",
-    "measure", "evaluate", "monitor", "alternative", "however",
-    "for example", "first", "then", "if",
+    "first", "then", "next", "finally", "step", "approach",
+    "implement", "build", "design", "create", "configure",
+]
+
+PRODUCTION_MARKERS = [
+    "docker", "kubernetes", "k8s", "container", "deploy", "monitor",
+    "scale", "fail", "failure", "retry", "timeout", "time out",
+    "disconnect", "latency", "cache", "health check", "load balanc",
+    "secure", "security", "auth", "injection", "pii", "guardrail",
+    "zero-downtime", "production",
+]
+
+EVALUATION_MARKERS = [
+    "measure", "evaluate", "metric", "benchmark", "test", "baseline",
+    "track", "quantify", "regression", "accuracy", "precision", "recall",
+    "validat",
+]
+
+HESITATION_MARKERS = [
+    "i don't know", "i dont know", "not sure", "no idea",
+    "i'm not sure", "i have no clue",
 ]
 
 
-def score_topic(topic):
-    answer = (topic.get("answer") or "").lower()
-    words = answer.split()
-
-    score = 0
-    if len(words) >= 15:
-        score += 25
-    if len(words) >= 40:
-        score += 25
-
-    depth = sum(1 for marker in DEPTH_MARKERS if marker in answer)
-    score += min(depth * 7, 30)
-
-    tools = day_map[topic["day"]].get("tools", [])
-    mentioned = sum(1 for tool in tools if tool.lower() in answer)
-    score += min(mentioned * 5, 15)
-
-    return min(score, 100)
+def _hits(text, markers):
+    return [m for m in markers if m in text]
 
 
-def generate_feedback(candidate, topics, covered_days):
-    if llm.available():
-        feedback = llm_feedback(candidate, topics)
-        if feedback:
-            return enrich_topics(feedback)
-    return enrich_topics(heuristic_feedback(candidate, topics, covered_days))
+def score_answer_rubric(topic):
+    """Score one question/answer pair against the rubric, with an
+    audit trail of exactly why each dimension's points were awarded."""
+    day_info = day_map[topic["day"]]
+    answer = topic.get("answer") or ""
+    low = answer.lower()
+    word_count = len(answer.split())
 
-
-def enrich_topics(feedback):
-    topics_out = {}
-    for key, value in (feedback.get("topics") or {}).items():
-        day = int(str(key).split("_")[-1]) if str(key).rsplit("_", 1)[-1].isdigit() else None
-        title = day_map.get(day, {}).get("title", f"Day {day}") if day else str(key)
-        topics_out[key] = {
-            "title": title,
-            "score": int(value) if isinstance(value, (int, float, str)) else 50,
+    if not answer.strip():
+        return {
+            "day": topic["day"],
+            "title": day_info["title"],
+            "mode": topic["mode"],
+            "question": topic["question"],
+            "answer": "",
+            "score": 0,
+            "dimensions": [
+                {"key": d["key"], "label": d["label"], "score": 0,
+                 "max": d["max"], "reason": "No answer provided."}
+                for d in RUBRIC
+            ],
+            "comment": "No answer recorded for this question.",
         }
-    feedback["topics"] = topics_out
-    return feedback
+
+    # Relevance & coverage (0-20)
+    tools = [
+        t for t in day_info.get("tools", [])
+        if t.lower() in low and t.lower() not in COMMON_TOOLS
+    ]
+    rel = 6 + (10 if word_count >= 8 else 4) + min(len(tools) * 3, 8)
+    rel = min(rel, 20)
+    if tools:
+        rel_reason = (
+            "Directly addressed the question and covered the day's core "
+            f"tool(s): {', '.join(tools)}."
+        )
+    else:
+        rel_reason = (
+            "Addressed the question but referenced none of the day's "
+            "core tools or objectives."
+        )
+
+    # Reasoning & tradeoffs (0-30)
+    hesitating = any(m in low for m in HESITATION_MARKERS)
+    reas = _hits(low, REASONING_MARKERS)
+    if hesitating:
+        reasoning = 0
+        reas_reason = (
+            "Answer defers (\"not sure / don't know\") — no reasoning or "
+            "tradeoff discussion."
+        )
+    elif word_count < 15:
+        reasoning = 4
+        reas_reason = (
+            f"Answer too brief ({word_count} words) to demonstrate "
+            "reasoning or tradeoffs."
+        )
+    else:
+        reasoning = min(10 + len(reas) * 4, 30)
+        if reas:
+            reas_reason = (
+                "Showed reasoning/tradeoff thinking "
+                f"({len(reas)} signals): {', '.join(reas[:4])}."
+            )
+        else:
+            reas_reason = (
+                "Answer is descriptive rather than argued — no tradeoffs, "
+                "alternatives, or 'why' behind the choices."
+            )
+
+    # Concrete depth (0-20)
+    seq = _hits(low, DEPTH_MARKERS)
+    depth = 3
+    if word_count >= 15:
+        depth += 3
+    if word_count >= 40:
+        depth += 4
+    depth += min(len(seq) * 3, 9)
+    depth = min(depth, 20)
+    if word_count >= 15 and seq:
+        depth_reason = (
+            f"Structured, detailed answer ({word_count} words) with "
+            f"concrete steps ({', '.join(seq[:3])})."
+        )
+    elif word_count < 15:
+        depth_reason = (
+            f"Answer is brief ({word_count} words) — little "
+            "implementation detail."
+        )
+    else:
+        depth_reason = (
+            f"Lengthy answer ({word_count} words) but lacks explicit "
+            "steps or sequence."
+        )
+
+    # Production awareness (0-15)
+    prod = _hits(low, PRODUCTION_MARKERS)
+    production = min(len(prod) * 4, 15)
+    if prod:
+        prod_reason = (
+            "Showcased production thinking "
+            f"({len(prod)} signals): {', '.join(prod[:4])}."
+        )
+    else:
+        prod_reason = (
+            "No production or failure-mode considerations — deployment, "
+            "scaling, monitoring, or security all absent."
+        )
+
+    # Evaluation & metrics (0-15)
+    ev = _hits(low, EVALUATION_MARKERS)
+    if ev:
+        evaluation = min(4 + len(ev) * 4, 15)
+        eval_reason = (
+            "References concrete evaluation "
+            f"({len(ev)} signals): {', '.join(ev[:4])}."
+        )
+    else:
+        evaluation = 0
+        eval_reason = (
+            "No metrics or evaluation plan — the answer never states how "
+            "the solution would be measured."
+        )
+
+    dims = [
+        {"key": "relevance", "label": "Relevance & coverage",
+         "score": rel, "max": 20, "reason": rel_reason},
+        {"key": "reasoning", "label": "Reasoning & tradeoffs",
+         "score": reasoning, "max": 30, "reason": reas_reason},
+        {"key": "depth", "label": "Concrete depth",
+         "score": depth, "max": 20, "reason": depth_reason},
+        {"key": "production", "label": "Production awareness",
+         "score": production, "max": 15, "reason": prod_reason},
+        {"key": "evaluation", "label": "Evaluation & metrics",
+         "score": evaluation, "max": 15, "reason": eval_reason},
+    ]
+
+    total = min(sum(d["score"] for d in dims), 100)
+
+    ratios = sorted(dims, key=lambda d: d["score"] / d["max"], reverse=True)
+    strong = ratios[0]
+    weak = [d for d in ratios if d["score"] / d["max"] < 0.4]
+
+    comment = (
+        f"Awarded {total}/100 — strongest on "
+        f"{strong['label'].lower()} ({strong['score']}/{strong['max']})."
+    )
+    if weak:
+        weakest = weak[0]
+        comment += (
+            f" Lost the most points on {weakest['label'].lower()} "
+            f"({weakest['score']}/{weakest['max']})."
+        )
+    comment += " " + ratios[-1]["reason"]
+
+    return {
+        "day": topic["day"],
+        "title": day_info["title"],
+        "mode": topic["mode"],
+        "question": topic["question"],
+        "answer": answer,
+        "score": total,
+        "dimensions": dims,
+        "comment": comment,
+    }
 
 
-def llm_feedback(candidate, topics):
+def build_transcript(topics):
     lines = []
-    for topic in topics:
+    for index, topic in enumerate(topics, 1):
         lines.append(
-            f"Interviewer (Day {topic['day']}, {topic['mode']}): "
+            f"Q{index} ({topic['mode']} · Day {topic['day']}): "
             f"{topic['question']}"
         )
         if topic.get("answer"):
-            lines.append(f"Candidate: {topic['answer']}")
+            lines.append(f"A{index}: {topic['answer']}")
+    return "\n".join(lines)
+
+
+def generate_feedback(candidate, topics, covered_days):
+    answered = [t for t in topics if t.get("answer")]
+    scorecards = [score_answer_rubric(t) for t in answered]
+
+    day_scores = {}
+    for topic, card in zip(answered, scorecards):
+        day_scores.setdefault(topic["day"], []).append(card["score"])
+    day_scores = {
+        day: int(sum(values) / len(values))
+        for day, values in day_scores.items()
+    }
+
+    all_scores = [card["score"] for card in scorecards]
+    overall = int(sum(all_scores) / len(all_scores)) if all_scores else 50
+
+    if len(covered_days) >= MIN_CURRICULUM_DAYS:
+        overall = min(
+            overall + min(len(covered_days) - MIN_CURRICULUM_DAYS, 2) * 2,
+            100
+        )
+    if len(all_scores) >= 2 and max(all_scores) - min(all_scores) >= 50:
+        overall = max(overall - 5, 0)
+
+    if overall >= 75:
+        verdict = "strong"
+    elif overall >= 55:
+        verdict = "developing"
+    else:
+        verdict = "needs reinforcement"
+
+    narrative = None
+    if llm.available():
+        narrative = llm_feedback(candidate, topics, scorecards, overall)
+    if not narrative:
+        narrative = heuristic_feedback(candidate, topics, day_scores, overall)
+
+    return {
+        "candidate": candidate["member"]["name"],
+        "overall_score": overall,
+        "verdict": verdict,
+        "borderline": 55 <= overall < 75,
+        "strengths": narrative["strengths"],
+        "improvements": narrative["improvements"],
+        "summary": narrative["summary"],
+        "topics": {
+            f"day_{day}": {"title": day_map[day]["title"], "score": score}
+            for day, score in sorted(day_scores.items())
+        },
+        "rubric": RUBRIC,
+        "scorecard": scorecards,
+        "transcript": build_transcript(topics),
+    }
+
+
+def llm_feedback(candidate, topics, scorecards, overall):
+    lines = []
+    for card in scorecards:
+        lines.append(
+            f"Interviewer (Day {card['day']}, {card['mode']}): "
+            f"{card['question']}"
+        )
+        if card.get("answer"):
+            lines.append(f"Candidate: {card['answer']}")
+        dims = " | ".join(
+            f"{d['label']} {d['score']}/{d['max']}"
+            for d in card["dimensions"]
+        )
+        lines.append(f"Scorecard: {card['score']}/100 ({dims})")
     transcript = "\n".join(lines)
 
     member = candidate["member"]
@@ -587,64 +834,30 @@ def llm_feedback(candidate, topics):
         {"role": "user",
          "content":
              f"CANDIDATE: {member['name']}, {member['jobRole']} "
-             f"({member['yearsExperience']} yrs)\n\nTRANSCRIPT:\n{transcript}"}
+             f"({member['yearsExperience']} yrs)\n"
+             f"OVERALL SCORE: {overall}/100\n\n"
+             f"TRANSCRIPT WITH SCORECARDS:\n{transcript}"}
     ]
 
     data = llm.chat_json(messages, temperature=0.3, max_tokens=800)
     if not data:
         return None
 
-    try:
-        score = max(0, min(100, int(data.get("overall_score", 50))))
-    except (TypeError, ValueError):
-        score = 50
-
     strengths = [str(s) for s in (data.get("strengths") or [])][:4]
     improvements = [str(i) for i in (data.get("improvements") or [])][:5]
     summary = str(data.get("summary") or "")
-    topics_out = data.get("topics") or {}
+
+    if not strengths and not improvements and not summary:
+        return None
 
     return {
-        "candidate": member["name"],
-        "overall_score": score,
         "strengths": strengths,
         "improvements": improvements,
         "summary": summary,
-        "topics": topics_out,
     }
 
 
-def heuristic_feedback(candidate, topics, covered_days):
-    member = candidate["member"]
-    answered = [t for t in topics if t.get("answer")]
-
-    day_scores = {}
-    for topic in answered:
-        day_scores.setdefault(topic["day"], []).append(score_topic(topic))
-
-    day_scores = {
-        day: int(sum(values) / len(values))
-        for day, values in day_scores.items()
-    }
-
-    all_scores = [score_topic(t) for t in answered]
-
-    average = (
-        int(sum(all_scores) / len(all_scores))
-        if all_scores else 50
-    )
-
-    breadth = len(covered_days)
-    if breadth >= MIN_CURRICULUM_DAYS:
-        average = min(
-            average + min(breadth - MIN_CURRICULUM_DAYS, 2) * 2, 100
-        )
-
-    if len(all_scores) >= 2:
-        spread = max(all_scores) - min(all_scores)
-        if spread >= 50:
-            average = max(average - 5, 0)
-
+def heuristic_feedback(candidate, topics, day_scores, overall):
     strengths, improvements = [], []
 
     strong = sorted(day_scores.items(), key=lambda kv: -kv[1])[:2]
@@ -655,7 +868,7 @@ def heuristic_feedback(candidate, topics, covered_days):
                 "answered with concrete implementation detail"
             )
 
-    if not strengths and average >= 55:
+    if not strengths and overall >= 55:
         strengths.append(
             "Consistent, engaged responses throughout the interview"
         )
@@ -674,7 +887,7 @@ def heuristic_feedback(candidate, topics, covered_days):
                 "tradeoffs explicitly"
             )
 
-    answer_text = " ".join(t["answer"] for t in answered).lower()
+    answer_text = " ".join(t["answer"] for t in topics).lower()
 
     if "tradeoff" not in answer_text:
         improvements.append(
@@ -687,40 +900,34 @@ def heuristic_feedback(candidate, topics, covered_days):
             "Reference how you would measure or evaluate your solution — "
             "metrics show production thinking"
         )
-    if average < 55:
+    if overall < 55:
         improvements.append(
             "Structure answers as: approach → implementation → tradeoffs → "
             "evaluation. This scaffolding improves clarity and depth"
         )
 
-    if average >= 75:
+    if overall >= 75:
         verdict = "strong"
-    elif average >= 55:
+    elif overall >= 55:
         verdict = "developing"
     else:
         verdict = "needs reinforcement"
 
     summary = (
         f"Interview covered {len(topics)} questions across "
-        f"{len(covered_days)} curriculum days "
-        f"(days {sorted(covered_days)}). "
+        f"{len(day_scores)} curriculum days "
+        f"(days {sorted(day_scores)}). "
         f"Overall understanding is {verdict}: "
         + ("solid grasp of core concepts demonstrated"
-           if average >= 75
+           if overall >= 75
            else "core ideas are present but depth is inconsistent"
-           if average >= 55
+           if overall >= 55
            else "fundamental concepts require review")
         + "."
     )
 
     return {
-        "candidate": member["name"],
-        "overall_score": average,
         "strengths": strengths[:3],
         "improvements": improvements[:4],
         "summary": summary,
-        "topics": {
-            f"day_{day}": score
-            for day, score in sorted(day_scores.items())
-        },
     }

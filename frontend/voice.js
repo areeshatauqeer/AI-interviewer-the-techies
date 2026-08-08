@@ -299,6 +299,70 @@ function handleComplete(feedback) {
     });
 }
 
+function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str == null ? "" : String(str);
+    return div.innerHTML.replace(/\n/g, "<br>");
+}
+
+function buildCompletionFeedbackHTML(feedback) {
+    const rubric = feedback.rubric || [];
+    const scorecard = feedback.scorecard || [];
+    const parts = [];
+
+    if (feedback.borderline) {
+        parts.push(
+            '<div class="cmp-banner"><strong>Borderline result.</strong> ' +
+            "See the per-answer scorecard below for exactly why each answer " +
+            "earned its points.</div>"
+        );
+    }
+
+    if (rubric.length) {
+        parts.push('<div class="cmp-section"><div class="cmp-section-title">Scoring Rubric</div>');
+        rubric.forEach((d) => {
+            parts.push(
+                `<div class="cmp-rubric-row"><span class="cmp-rubric-label">${escapeHtml(d.label)}</span>` +
+                `<span class="cmp-rubric-max">up to ${d.max} pts</span></div>`
+            );
+        });
+        parts.push("</div>");
+    }
+
+    if (scorecard.length) {
+        parts.push('<div class="cmp-section"><div class="cmp-section-title">Per-Answer Scorecard</div>');
+        scorecard.forEach((entry, i) => {
+            const dims = (entry.dimensions || [])
+                .map(
+                    (d) => `
+                    <div class="cmp-dim">
+                        <div class="cmp-dim-top"><span>${escapeHtml(d.label)}</span><span>${d.score}/${d.max}</span></div>
+                        <div class="cmp-bar"><i style="width:${Math.min(100, (d.score / d.max) * 100)}%"></i></div>
+                        <div class="cmp-reason">${escapeHtml(d.reason || "")}</div>
+                    </div>`
+                )
+                .join("");
+            parts.push(`
+                <details class="cmp-entry" ${i === 0 ? "open" : ""}>
+                    <summary>
+                        <span class="cmp-qnum">Q${i + 1}</span>
+                        <span class="cmp-qtitle">Day ${escapeHtml(entry.day)} · ${escapeHtml(entry.title || "Topic")}</span>
+                        <span class="cmp-qscore">${Math.round(entry.score)}</span>
+                    </summary>
+                    <div class="cmp-entry-body">
+                        <div class="cmp-qa"><span>Question</span><div>${escapeHtml(entry.question || "")}</div></div>
+                        <div class="cmp-qa"><span>Answer</span><div>${escapeHtml(entry.answer || "(no answer)")}</div></div>
+                        ${entry.comment ? `<div class="cmp-comment">${escapeHtml(entry.comment)}</div>` : ""}
+                        <div class="cmp-dims">${dims}</div>
+                    </div>
+                </details>`);
+        });
+        parts.push("</div>");
+    }
+
+    return parts.join("");
+}
+
 function showCompletion(feedback) {
     const score = Math.max(0, Math.min(100, Math.round(feedback.overall_score || 0)));
     const box = document.getElementById("completion");
@@ -311,6 +375,12 @@ function showCompletion(feedback) {
     fill.style.stroke = score >= 75 ? "#34d399" : score >= 55 ? "#fbbf24" : "#f87171";
     fill.style.strokeDasharray = c.toFixed(2);
     fill.style.strokeDashoffset = c.toFixed(2);
+
+    const target = document.getElementById("completion-feedback");
+    if (target) {
+        target.innerHTML = buildCompletionFeedbackHTML(feedback);
+    }
+
     box.hidden = false;
 
     requestAnimationFrame(() => {
