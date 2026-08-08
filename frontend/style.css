@@ -475,3 +475,160 @@ body {
         max-width: 88%;
     }
 }
+
+/* ---------------- Intro (Shay) ---------------- */
+
+.intro {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+
+.intro[hidden] {
+    display: none;
+}
+
+.intro.active {
+    opacity: 1;
+}
+
+.intro-backdrop {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(700px 420px at 50% 38%, rgba(124, 58, 237, 0.28) 0%, transparent 70%),
+        radial-gradient(500px 300px at 50% 70%, rgba(79, 124, 255, 0.14) 0%, transparent 70%),
+        rgba(13, 10, 31, 0.9);
+    backdrop-filter: blur(6px);
+}
+
+.intro-stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+    padding: 0 24px;
+}
+
+.intro-avatar {
+    position: relative;
+    width: 210px;
+    height: 210px;
+    border-radius: 50%;
+    overflow: hidden;
+    box-shadow:
+        0 0 60px rgba(124, 58, 237, 0.55),
+        0 0 130px rgba(79, 124, 255, 0.35);
+    opacity: 0;
+    transform: translateY(46px) scale(0.35);
+    transition:
+        transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1),
+        opacity 0.4s ease;
+}
+
+.intro-avatar::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 2px solid rgba(155, 107, 255, 0.6);
+    animation: introPulse 2.4s ease-out infinite;
+    pointer-events: none;
+}
+
+.intro-avatar svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.intro.active .intro-avatar {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.intro.active .intro-avatar svg {
+    animation: introFloat 3.2s ease-in-out infinite;
+}
+
+.intro-bubble {
+    position: relative;
+    max-width: 420px;
+    background: var(--bg-ai);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    border-top-left-radius: 4px;
+    padding: 15px 22px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    text-align: center;
+    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+    min-height: 26px;
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.intro-bubble::before {
+    content: "";
+    position: absolute;
+    top: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 9px solid transparent;
+    border-right: 9px solid transparent;
+    border-bottom: 9px solid var(--bg-ai);
+}
+
+.intro.active .intro-bubble {
+    opacity: 1;
+    transform: none;
+}
+
+.intro.exiting .intro-avatar {
+    opacity: 0;
+    transform: translateY(-54px) scale(0.3);
+    transition: transform 0.5s ease-in, opacity 0.4s ease;
+}
+
+.intro.exiting .intro-bubble {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.8);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.intro.exiting .intro-avatar svg {
+    animation: none;
+}
+
+.intro-typing-caret {
+    display: inline-block;
+    width: 2px;
+    height: 1.05em;
+    margin-left: 2px;
+    background: var(--purple);
+    vertical-align: -0.15em;
+    animation: caretBlink 0.7s steps(1) infinite;
+}
+
+@keyframes introFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+@keyframes introPulse {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(1.22); opacity: 0; }
+}
+
+@keyframes caretBlink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}

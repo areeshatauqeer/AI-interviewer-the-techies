@@ -1,6 +1,8 @@
 const API = "/api/interview";
 const MIN_QUESTIONS = 8;
 
+const INTRO_TEXT = "Hi, I'm Shay. I will be interviewing you today!";
+
 let conversation = [];
 let sessionId = null;
 let currentCandidate = "CAND-003";
@@ -100,6 +102,43 @@ function setBusy(busy) {
     if (box) box.disabled = busy;
 }
 
+function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function typeText(el, text, msPerChar) {
+    for (let i = 0; i < text.length; i++) {
+        el.textContent = text.slice(0, i + 1);
+        await wait(msPerChar);
+    }
+}
+
+async function playIntro() {
+    const overlay = document.getElementById("intro");
+    const textEl = document.getElementById("intro-text");
+
+    textEl.textContent = "";
+    overlay.classList.remove("exiting");
+    overlay.hidden = false;
+
+    requestAnimationFrame(() => {
+        overlay.classList.add("active");
+    });
+
+    await wait(700);
+
+    await typeText(textEl, INTRO_TEXT, 38);
+    await wait(1000);
+
+    overlay.classList.remove("active");
+    overlay.classList.add("exiting");
+
+    await wait(550);
+
+    overlay.classList.remove("exiting");
+    overlay.hidden = true;
+}
+
 function renderFeedback(feedback) {
     const lines = [
         "Interview Complete",
@@ -167,6 +206,10 @@ async function startInterview() {
     currentCandidate = document.getElementById("candidate-select").value || currentCandidate;
     conversation = [];
     sessionId = null;
+
+    setBusy(true);
+    await playIntro();
+    setBusy(false);
 
     document.getElementById("chat").innerHTML = "";
     document.getElementById("answer").value = "";
