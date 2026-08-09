@@ -129,6 +129,42 @@ Returns candidate profiles for the interview UI.
 
 Health check.
 
+## AI Usage Log
+
+Every prompt and output is recorded to `PROMPT.md` (JSON lines) and is
+accessible through the app — satisfying the "AI Usage Log must be
+included and accessible" requirement.
+
+**View it live:**
+- `http://127.0.0.1:8000/log.html` — human-readable log page (filter by
+  interviews, LLM calls, or imported chats) with a download button.
+- `GET /api/log` — full log as JSON.
+- `GET /api/log/download` — downloads the raw log as `AI_Usage_Log.txt`.
+- `PROMPT.md` — the underlying JSON-lines file.
+
+**What gets logged automatically:**
+- `session_start` / `turn` (question) / `answer` / `session_end` — every
+  interview, including past sessions backfilled from `sessions.db`.
+- `llm_call` — full prompt messages + raw response for LLM-powered
+  question generation and feedback.
+- `session_complete` — final feedback (score, strengths, improvements).
+
+**Importing chats from other AIs (e.g. Microsoft Copilot):**
+- CLI: `python3 -m import_chat <file.json|transcript.txt> --title "..."`
+- Web: open `/log.html` → **+ Import chat** and paste the conversation.
+- Both accept JSON (`[{role, content}, ...]` or an object with a
+  `messages` key) or plain-text transcripts (`You:` / `Copilot:`
+  markers). Duplicate chats are skipped.
+- Re-sync missing start/end markers anytime: `python3 -m prompt_log`.
+
+**Automatically capturing opencode chats:**
+- A plugin (`.opencode/plugin/opencode-chatlog.ts`) records every opencode
+  session to `PROMPT.md` as an `external_chat` record (one record per
+  session, kept up to date). Restart opencode after any change to the
+  plugin.
+- Past opencode sessions can be backfilled from the local database:
+  `python3 backfill_opencode.py`.
+
 ## Minimum requirements coverage
 
 - Conversational technical interview — adaptive question engine

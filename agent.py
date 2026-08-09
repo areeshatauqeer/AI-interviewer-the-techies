@@ -2,6 +2,7 @@ import json
 import random
 
 import llm
+import prompt_log
 
 MIN_QUESTIONS = 8
 MIN_CURRICULUM_DAYS = 4
@@ -387,6 +388,18 @@ def llm_next_question(candidate, conversation, day_info, mode,
     ]
 
     data = llm.chat_json(messages, temperature=0.8, max_tokens=300)
+    prompt_log.log_record({
+        "type": "llm_call",
+        "kind": "question",
+        "timestamp": prompt_log.now(),
+        "candidate_id": candidate["member"]["id"],
+        "mode": mode,
+        "day": day_info["day"],
+        "level": level,
+        "question_number": question_number,
+        "messages": messages,
+        "raw_output": data,
+    })
     if not data or not data.get("question"):
         return None
 
@@ -398,11 +411,27 @@ def llm_next_question(candidate, conversation, day_info, mode,
 # Interview orchestration
 # ------------------------------------------------------------------
 
-def next_turn(candidate, conversation, topics):
+def next_turn(candidate, conversation, topics, session_id=None):
     answers = [m.content for m in conversation if m.role == "user"]
 
     for index, topic in enumerate(topics):
         topic["answer"] = answers[index] if index < len(answers) else None
+
+    for index, topic in enumerate(topics, 1):
+        answer = topic.get("answer")
+        if answer and not topic.get("logged_answer"):
+            topic["logged_answer"] = True
+            prompt_log.log_record({
+                "type": "answer",
+                "timestamp": prompt_log.now(),
+                "session_id": session_id,
+                "candidate_id": candidate["member"]["id"],
+                "turn": index,
+                "day": topic.get("day"),
+                "mode": topic.get("mode"),
+                "question": topic.get("question"),
+                "answer": answer,
+            })
 
     asked_count = len(topics)
     covered_days = sorted({t["day"] for t in topics})
@@ -410,6 +439,13 @@ def next_turn(candidate, conversation, topics):
     if (asked_count >= MIN_QUESTIONS and
             len(set(covered_days)) >= MIN_CURRICULUM_DAYS):
         feedback = generate_feedback(candidate, topics, covered_days)
+        prompt_log.log_record({
+            "type": "session_complete",
+            "timestamp": prompt_log.now(),
+            "session_id": session_id,
+            "candidate_id": candidate["member"]["id"],
+            "feedback": feedback,
+        })
         return (
             {"status": "COMPLETED", "feedback": feedback},
             topics
@@ -457,6 +493,16 @@ def next_turn(candidate, conversation, topics):
         "mode": mode,
         "question": question,
         "answer": None
+    })
+
+    prompt_log.log_record({
+        "type": "turn",
+        "timestamp": prompt_log.now(),
+        "session_id": session_id,
+        "candidate_id": candidate["member"]["id"],
+        "day": day,
+        "mode": mode,
+        "question": question,
     })
 
     return (
@@ -840,6 +886,14 @@ def llm_feedback(candidate, topics, scorecards, overall):
     ]
 
     data = llm.chat_json(messages, temperature=0.3, max_tokens=800)
+    prompt_log.log_record({
+        "type": "llm_call",
+        "kind": "feedback",
+        "timestamp": prompt_log.now(),
+        "candidate_id": candidate["member"]["id"],
+        "messages": messages,
+        "raw_output": data,
+    })
     if not data:
         return None
 
