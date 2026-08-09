@@ -1,4 +1,5 @@
-these are the collected logs of my coding prompts mixed not in order
+these are the collected logs of my coding prompts mixed not in order 
+(ALSO CHAT LOGS ARE ALSO STORED IN AI AGENT SITE)
 
 {"type": "session_start", "session_id": "9a194bca-99ef-45f2-8fa8-03ff28aada57", "candidate_id": "CAND-003", "timestamp": "2026-08-07 21:31:45"}
 {"type": "turn", "session_id": "9a194bca-99ef-45f2-8fa8-03ff28aada57", "candidate_id": "CAND-003", "turn": 1, "day": 7, "mode": "opening", "question": "Alright Emily, let's get started.\n\nLet's talk about Embeddings Explained.\n\nUnderstand how text is converted into vector embeddings\n\nExplain this to me as if I'm a new teammate who needs to build on your work. What are the core ideas, and what's the most common mistake someone makes here?"}
