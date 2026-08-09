@@ -175,6 +175,56 @@ included and accessible" requirement.
 - Past opencode sessions can be backfilled from the local database:
   `python3 backfill_opencode.py`.
 
+## Deployment (Live Demo URL)
+
+The app is a single FastAPI service (SQLite, static frontend served from
+`frontend/`) and runs anywhere Python runs. The production start command
+binds `0.0.0.0` and honors the platform's `$PORT`:
+
+```bash
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}
+```
+
+**Render (recommended, free tier) — blueprint included (`render.yaml`):**
+1. Push this repo to GitHub.
+2. In the Render dashboard: **New → Blueprint** and select the repo.
+3. Render reads `render.yaml` and provisions a free web service
+   (`pip install -r requirements.txt`, then `uvicorn app:app
+   --host 0.0.0.0 --port $PORT`), with `/api/health` as the health check.
+4. Once deployed, use the `https://<service>.onrender.com` URL as your
+   Live Demo URL.
+
+**Railway:**
+1. **New Project → Deploy from GitHub** and pick the repo.
+2. Set the start command to `uvicorn app:app --host 0.0.0.0 --port $PORT`
+   (Railway injects `$PORT` automatically).
+3. Use the generated `https://<project>.up.railway.app` URL.
+
+**Hugging Face Spaces:**
+1. Create a Space (SDK: **Docker**, not Gradio), push the repo there.
+2. Run `uvicorn app:app --host 0.0.0.0 --port 7860` inside the container
+   and expose port 7860.
+3. Use the Space's public URL.
+
+**Verifying the Live URL works:** the demo is functional when all of
+these respond:
+
+- `GET /` → 200 (chat UI)
+- `GET /voice.html` → 200 (voice room)
+- `GET /log.html` → 200 (AI usage log page)
+- `GET /api/health` → `{"status":"ok"}`
+- `GET /api/candidates` → candidate JSON
+- `POST /api/interview` → a next-question or feedback response
+
+**Notes:**
+- `sessions.db` / `PROMPT.md` ship as seed data (pre-existing interviews
+  show up in the log); runtime writes are on the platform's ephemeral
+  disk and reset on redeploy.
+- Optional: set `LLM_PROVIDER` / `OPENAI_API_KEY` (or Groq/Ollama) as
+  environment variables to enable real LLM question generation; the
+  heuristic engine is used automatically otherwise.
+
 ## Minimum requirements coverage
 
 - Conversational technical interview — adaptive question engine

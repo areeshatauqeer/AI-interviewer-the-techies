@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Local runtime state (regenerated on demand by the app)
+sessions.db
+ai_usage_log.json
+
+# Editor / tooling
+.idea/
+.vscode/
+.DS_Store
+.opencode/
+
+# Deployment
+.env
+.env.*

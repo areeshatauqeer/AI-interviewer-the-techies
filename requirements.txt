@@ -1,4 +1,4 @@
-fastapi
-uvicorn
-pydantic
-pypdf
+fastapi==0.141.1
+uvicorn==0.52.1
+pydantic==2.13.4
+pypdf==6.15.0
