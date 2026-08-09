@@ -1,11 +1,12 @@
 const API = "/api/interview";
 const MIN_QUESTIONS = 8;
+const CANDIDATE_STORAGE_KEY = "abtalks_candidate_id";
 
 const INTRO_TEXT = "Hi, I'm Shay. I will be interviewing you today!";
 
 let conversation = [];
 let sessionId = null;
-let currentCandidate = "CAND-003";
+let currentCandidate = localStorage.getItem(CANDIDATE_STORAGE_KEY) || "CAND-003";
 let voiceMode = false;
 let recognition = null;
 let listening = false;
@@ -802,8 +803,7 @@ function hideCandidateSelector() {
 
 async function chooseCandidate(id) {
     currentCandidate = id;
-    const select = document.getElementById("candidate-select");
-    if (select) select.value = id;
+    localStorage.setItem(CANDIDATE_STORAGE_KEY, id);
     hideCandidateSelector();
 
     document.getElementById("chat").innerHTML = "";
@@ -853,7 +853,6 @@ async function sendAnswer(text) {
 }
 
 async function loadCandidates() {
-    const select = document.getElementById("candidate-select");
     const list = document.getElementById("candidate-list");
 
     let candidates;
@@ -866,12 +865,6 @@ async function loadCandidates() {
     }
 
     candidates.forEach((candidate) => {
-        if (select) {
-            const option = document.createElement("option");
-            option.value = candidate.id;
-            option.textContent = `${candidate.name} — ${candidate.role}`;
-            select.appendChild(option);
-        }
         if (list) {
             const button = document.createElement("button");
             button.className = "candidate-option";
@@ -888,8 +881,6 @@ async function loadCandidates() {
             list.appendChild(button);
         }
     });
-
-    if (select) select.value = currentCandidate;
 }
 
 const answerBox = document.getElementById("answer");

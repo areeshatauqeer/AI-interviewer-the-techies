@@ -5,6 +5,7 @@ import threading
 import datetime
 
 LOG_PATH = "PROMPT.md"
+USAGE_LOG_PATH = "ai_usage_log.json"
 DB_PATH = "sessions.db"
 _lock = threading.Lock()
 
@@ -16,6 +17,13 @@ def now():
 def log_record(record):
     with _lock:
         with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+
+
+def log_usage_record(record):
+    """Append one record to the compliance log (ai_usage_log.json)."""
+    with _lock:
+        with open(USAGE_LOG_PATH, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
 
 

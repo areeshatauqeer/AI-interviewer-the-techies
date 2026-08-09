@@ -191,6 +191,46 @@ def ai_usage_log_download():
     )
 
 
+@app.get("/api/usage-log")
+def usage_log():
+    records = []
+    if not os.path.exists(prompt_log.USAGE_LOG_PATH):
+        return {"records": [], "count": 0, "models": []}
+    for line in open(prompt_log.USAGE_LOG_PATH, "r", encoding="utf-8"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except ValueError:
+            continue
+    return {
+        "records": records,
+        "count": len(records),
+        "llm_calls": sum(1 for r in records if r.get("type") == "llm_call"),
+        "ok": sum(1 for r in records if r.get("ok")),
+        "failed": sum(1 for r in records if not r.get("ok")),
+        "models": sorted({
+            r.get("model") for r in records if r.get("model")
+        }),
+        "updated_at": (
+            os.path.getmtime(prompt_log.USAGE_LOG_PATH)
+            if os.path.exists(prompt_log.USAGE_LOG_PATH) else 0
+        ),
+    }
+
+
+@app.get("/api/usage-log/download")
+def usage_log_download():
+    if not os.path.exists(prompt_log.USAGE_LOG_PATH):
+        raise HTTPException(status_code=404, detail="Usage log not found")
+    return FileResponse(
+        prompt_log.USAGE_LOG_PATH,
+        media_type="application/json",
+        filename="ai_usage_log.json",
+    )
+
+
 @app.post("/api/import-chat")
 def import_external_chat(req: ImportChatRequest):
     if req.messages:

@@ -100,7 +100,7 @@ function llmCallCard(record) {
         <div class="log-card">
             <div class="log-card-head">
                 <div class="log-card-title">LLM call · ${esc(record.kind || "")}</div>
-                <div class="log-card-meta">${fmtTimestamp(record.timestamp)}</div>
+                <div class="log-card-meta">${fmtTimestamp(record.timestamp)} · ${esc(record.model || "unknown model")}</div>
             </div>
             <div class="log-session-id">${esc(record.candidate_id || "")} · day ${esc(record.day || "")} · ${esc(record.mode || "")} · Q${esc(record.question_number || "")} · ${esc(record.level || "")}</div>
             <details class="log-details"><summary>Prompt (${(record.messages || []).length} messages)</summary>${promptHtml}</details>

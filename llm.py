@@ -3,6 +3,8 @@ import os
 import re
 import urllib.request
 
+import prompt_log
+
 
 def _config():
     provider = os.getenv("LLM_PROVIDER", "").strip().lower()
@@ -37,6 +39,11 @@ def _config():
     )
 
 
+def model_name():
+    """Resolve the model the next call would use (for logging)."""
+    return _config()[2]
+
+
 def available():
     provider = os.getenv("LLM_PROVIDER", "").strip().lower()
     if provider == "ollama":
@@ -49,6 +56,7 @@ def chat(messages, temperature=0.7, max_tokens=600, timeout=40):
         return None
 
     url, headers, model = _config()
+    provider = os.getenv("LLM_PROVIDER", "").strip().lower() or "openai"
     headers["Content-Type"] = "application/json"
 
     body = json.dumps({
@@ -65,13 +73,31 @@ def chat(messages, temperature=0.7, max_tokens=600, timeout=40):
         method="POST"
     )
 
+    record = {
+        "type": "llm_call",
+        "timestamp": prompt_log.now(),
+        "provider": provider,
+        "model": model,
+        "endpoint": url,
+        "messages": messages,
+        "response": None,
+        "ok": False,
+    }
+
     try:
         with urllib.request.urlopen(request, timeout=timeout) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
-        return payload["choices"][0]["message"]["content"]
+        content = payload["choices"][0]["message"]["content"]
     except Exception as exc:
         print(f"[llm] request failed: {exc}")
+        record["error"] = str(exc)
+        prompt_log.log_usage_record(record)
         return None
+
+    record["ok"] = True
+    record["response"] = content
+    prompt_log.log_usage_record(record)
+    return content
 
 
 def chat_json(messages, **kwargs):

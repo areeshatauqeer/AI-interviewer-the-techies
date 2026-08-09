@@ -142,11 +142,21 @@ included and accessible" requirement.
 - `GET /api/log/download` — downloads the raw log as `AI_Usage_Log.txt`.
 - `PROMPT.md` — the underlying JSON-lines file.
 
+**Compliance file (`ai_usage_log.json`):**
+- Every single LLM call is automatically appended to `ai_usage_log.json`
+  (JSON lines) in the project root with a timestamp, model name, provider,
+  the full prompt (`messages`), the raw model response, and an `ok` /
+  `error` status — including failed calls.
+- `GET /api/usage-log` — the compliance log as JSON (counts + models used).
+- `GET /api/usage-log/download` — downloads `ai_usage_log.json`.
+- Model names also appear on each `llm_call` record in `PROMPT.md` and on
+  the log page.
+
 **What gets logged automatically:**
 - `session_start` / `turn` (question) / `answer` / `session_end` — every
   interview, including past sessions backfilled from `sessions.db`.
-- `llm_call` — full prompt messages + raw response for LLM-powered
-  question generation and feedback.
+- `llm_call` — full prompt messages + raw response (with model name) for
+  LLM-powered question generation and feedback.
 - `session_complete` — final feedback (score, strengths, improvements).
 
 **Importing chats from other AIs (e.g. Microsoft Copilot):**

@@ -1,9 +1,11 @@
 const API = "/api/interview";
 const MIN_QUESTIONS = 8;
+const CANDIDATE_STORAGE_KEY = "abtalks_candidate_id";
 
 let conversation = [];
 let sessionId = null;
-let currentCandidate = "CAND-003";
+let currentCandidate = localStorage.getItem(CANDIDATE_STORAGE_KEY) || "CAND-003";
+let candidateNames = {};
 let recognition = null;
 let listening = false;
 let busy = false;
@@ -424,7 +426,6 @@ function replayQuestion() {
 
 async function startVoiceInterview() {
     cancelAll();
-    currentCandidate = document.getElementById("candidate-select").value || currentCandidate;
     conversation = [];
     sessionId = null;
     currentQuestion = null;
@@ -442,8 +443,9 @@ async function startVoiceInterview() {
     await wait(1600);
 
     setSceneState("speaking");
+    const firstName = (candidateNames[currentCandidate] || "there").split(" ")[0];
     await speak(
-        "Hi, I'm Shay. Please make yourself comfortable — we'll have a relaxed conversation today.",
+        `Hi ${firstName}, I'm Shay. I will be interviewing you today. Please make yourself comfortable.`,
         setSubtitle
     );
     if (completed) return;
@@ -455,23 +457,15 @@ async function startVoiceInterview() {
 }
 
 async function loadCandidates() {
-    const select = document.getElementById("candidate-select");
     try {
         const response = await fetch("/api/candidates");
         const data = await response.json();
         data.candidates.forEach((candidate) => {
-            const option = document.createElement("option");
-            option.value = candidate.id;
-            option.textContent = `${candidate.name} — ${candidate.role}`;
-            select.appendChild(option);
+            candidateNames[candidate.id] = candidate.name;
         });
     } catch (err) {
-        const option = document.createElement("option");
-        option.value = "CAND-003";
-        option.textContent = "Emily Chen — AI Engineer";
-        select.appendChild(option);
+        candidateNames["CAND-003"] = "Emily Chen";
     }
-    select.value = currentCandidate;
 }
 
 if (!initRecognition()) {
