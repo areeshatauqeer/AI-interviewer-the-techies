@@ -8,6 +8,20 @@ MIN_QUESTIONS = 8
 MIN_CURRICULUM_DAYS = 4
 MAX_QUESTIONS = 12
 
+# On-the-fly performance analysis. Every answer is scored against the
+# rubric as the interview runs. A candidate whose running average stays
+# below the weak threshold after EARLY_EXIT_MIN_ANSWERS answers is ended
+# early with a warm closing message (fewer questions); candidates above
+# the bar run the full interview. Matches the feedback engine's
+# "needs reinforcement" bar (< 55).
+WEAK_SCORE_THRESHOLD = 55
+EARLY_EXIT_MIN_ANSWERS = 4
+
+EARLY_EXIT_MESSAGE = (
+    "Thanks so much for coming in today — it was great to have you here. "
+    "We really appreciate the time you spent with us."
+)
+
 with open("curriculum.json", "r", encoding="utf-8") as f:
     curriculum = json.load(f)
 
@@ -360,7 +374,7 @@ SYSTEM_INTERVIEWER = (
 
 
 def llm_next_question(candidate, conversation, day_info, mode,
-                      level, question_number):
+                      level, question_number, last_score=None):
     if not llm.available():
         return None
 
@@ -373,6 +387,15 @@ def llm_next_question(candidate, conversation, day_info, mode,
         f"Tools: {', '.join(day_info.get('tools', []))}\n"
         f"Objectives: {'; '.join(day_info['objectives'])}\n\n"
     )
+
+    if (mode == "followup" and last_score is not None
+            and last_score < WEAK_SCORE_THRESHOLD):
+        context += (
+            f"NOTE: The candidate's last answer scored {last_score}/100 — "
+            "below the passing bar. Keep this follow-up grounded and "
+            "concrete, lower the difficulty slightly, and probe the "
+            "foundational understanding behind this day's concept.\n\n"
+        )
 
     history = []
     for message in conversation[-8:]:
@@ -458,6 +481,37 @@ def next_turn(candidate, conversation, topics, session_id=None):
     if not plan:
         raise ValueError("Candidate has no completed missions to assess")
 
+    # Score every answer so far and track the running average. If the
+    # candidate is consistently below the weak threshold, end the
+    # interview early instead of running them through all 8 questions.
+    scores = []
+    last_score = None
+    for topic in topics:
+        if topic.get("answer"):
+            topic["score"] = score_answer_rubric(topic)["score"]
+            scores.append(topic["score"])
+    avg_score = (sum(scores) / len(scores)) if scores else None
+    if topics and topics[-1].get("score") is not None:
+        last_score = topics[-1]["score"]
+
+    if (avg_score is not None
+            and len(scores) >= EARLY_EXIT_MIN_ANSWERS
+            and avg_score < WEAK_SCORE_THRESHOLD):
+        feedback = early_exit_feedback(candidate, topics, scores)
+        prompt_log.log_record({
+            "type": "session_complete",
+            "timestamp": prompt_log.now(),
+            "session_id": session_id,
+            "candidate_id": candidate["member"]["id"],
+            "early_exit": True,
+            "avg_score": avg_score,
+            "feedback": feedback,
+        })
+        return (
+            {"status": "COMPLETED", "early_exit": True, "feedback": feedback},
+            topics
+        )
+
     if not topics:
         day, mode = plan[0], "opening"
     else:
@@ -475,7 +529,8 @@ def next_turn(candidate, conversation, topics, session_id=None):
     question = None
     if llm.available():
         question = llm_next_question(
-            candidate, conversation, day_info, mode, level, question_number
+            candidate, conversation, day_info, mode, level,
+            question_number, last_score=last_score
         )
 
     if not question:
@@ -802,6 +857,30 @@ def build_transcript(topics):
         if topic.get("answer"):
             lines.append(f"A{index}: {topic['answer']}")
     return "\n".join(lines)
+
+
+def early_exit_feedback(candidate, topics, scores):
+    """Warm, short feedback for a candidate who is ended early because
+    their answers stayed below the weak threshold."""
+    return {
+        "candidate": candidate["member"]["name"],
+        "overall_score": int(sum(scores) / len(scores)),
+        "verdict": "needs reinforcement",
+        "borderline": False,
+        "early_exit": True,
+        "summary": (
+            f"{EARLY_EXIT_MESSAGE} We're wrapping up the session a bit "
+            "early, but every conversation helps us improve the program."
+        ),
+        "strengths": [
+            "Showed up and engaged with the interview questions"
+        ],
+        "improvements": [],
+        "topics": {},
+        "rubric": [],
+        "scorecard": [],
+        "transcript": "",
+    }
 
 
 def generate_feedback(candidate, topics, covered_days):

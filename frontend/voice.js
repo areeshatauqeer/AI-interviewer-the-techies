@@ -292,7 +292,9 @@ function handleComplete(feedback) {
     completed = true;
     setSceneState("speaking");
     speak(
-        "That's the end of your interview. Thank you so much for your time!",
+        feedback.early_exit && feedback.summary
+            ? feedback.summary
+            : "That's the end of your interview. Thank you so much for your time!",
         setSubtitle
     ).then(() => {
         showCompletion(feedback);

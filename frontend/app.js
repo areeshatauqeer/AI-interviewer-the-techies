@@ -718,7 +718,11 @@ function renderFeedback(feedback) {
 
     if (voiceMode) {
         setVoiceState("speaking");
-        speak("That's the end of your interview, thank you for your time!");
+        speak(
+            feedback.early_exit && feedback.summary
+                ? feedback.summary
+                : "That's the end of your interview, thank you for your time!"
+        );
     }
 }
 
