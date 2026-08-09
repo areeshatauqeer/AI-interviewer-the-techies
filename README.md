@@ -192,6 +192,8 @@ uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}
 3. Render reads `render.yaml` and provisions a free web service
    (`pip install -r requirements.txt`, then `uvicorn app:app
    --host 0.0.0.0 --port $PORT`), with `/api/health` as the health check.
+   Python 3.13.5 is pinned via the `.python-version` file at the repo
+   root (Render's Blueprint does not accept a `pythonVersion` field).
 4. Once deployed, use the `https://<service>.onrender.com` URL as your
    Live Demo URL.
 
