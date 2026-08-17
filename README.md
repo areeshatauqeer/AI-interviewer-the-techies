@@ -1,239 +1,32 @@
 # ABTalks AI Interview Agent
 
-An AI agent that conducts a realistic, adaptive, multi-turn technical
-interview for candidates of a 31-day AI Cohort. It assesses each
-candidate's understanding of the curriculum concepts they completed,
-asks intelligent follow-ups that react to their actual answers, keeps
-full conversation context, and produces structured, actionable feedback.
+An adaptive, multi-turn AI technical interview agent built for candidates of a 31-day AI Cohort. The system evaluates candidate responses to curriculum concepts, asks dynamic follow-up questions, preserves conversation context, and delivers structured, actionable evaluations.
 
-live link :https://abtalks-ai-interview-agent-8w7b.onrender.com
+🔗 **Live Demo:** [https://abtalks-ai-interview-agent-8w7b.onrender.com](https://abtalks-ai-interview-agent-8w7b.onrender.com)
 
-## Quick start
+---
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python -m uvicorn app:app --port 8000
-```
+## Key Features
 
-Open http://127.0.0.1:8000
+- **Adaptive Question Planner:** Generates an 8+ question interview covering at least 4 curriculum days, prioritizing candidate weak areas (failed missions or high attempt counts).
+- **Context-Aware Follow-ups:** Alternates between scenario-based opening questions and intelligent follow-ups probing candidate choices, tradeoffs, and failure modes.
+- **Two Interview Modes:**
+  - **Chat UI (`/`):** Classic turn-based text interface.
+  - **Voice UI (`/voice.html`):** Hands-free, spoken interview with speech synthesis and the Web Speech API (Chrome/Edge).
+- **Structured Feedback:** Delivers an overall score (0–100), key strengths, areas for improvement, and per-topic breakdowns.
+- **Built-in Compliance & AI Logging:** Automatically logs all prompts, LLM generations, and sessions to `PROMPT.md` and `ai_usage_log.json` with a live visualizer at `/log.html`.
+- **Hybrid Engine:** Runs out-of-the-box using a heuristic engine, with seamless fallback support for real LLMs (OpenAI, Groq, Ollama).
 
-## Two interview environments
+---
 
-- **Chatbot (text)** — http://127.0.0.1:8000 — the classic chat UI. Shay greets
-  the candidate with a short intro, then runs the interview as chat bubbles.
-- **Voice (face-to-face)** — http://127.0.0.1:8000/voice.html — Shay walks in,
-  sits across from the candidate in an office scene, and conducts a hands-free
-  spoken interview. She reads questions aloud (human-paced, with sighs),
-  listens to answers via the Web Speech API, and shows a score ring on
-  completion. Requires Chrome or Edge.
+## Quick Start
 
-A "Voice interview" button in the chatbot's corner links to the voice room.
+### Prerequisites
+- Python 3.10+ (Python 3.13 recommended)
 
-## How the agent works
+### Local Setup
 
-1. **Planner** — builds an ordered interview plan from the candidate's
-   completed missions, prioritizing weak areas (high attempts or failed
-   missions) while ensuring coverage of at least 4 distinct curriculum
-   days and 8 questions.
-2. **Adaptive questioning** — every turn alternates between an opening
-   question (scenario-based, calibrated to the candidate's difficulty
-   level) and a follow-up that reacts to the candidate's previous answer
-   (probes tools they mentioned, failure modes, tradeoffs, scale,
-   evaluation).
-3. **Context** — full conversation is maintained server-side per session
-   (SQLite) and echoed by the client, so the agent stays coherent across
-   the entire interview.
-4. **Feedback** — on completion, produces an overall score (0–100),
-   strengths, actionable improvements, a summary, and per-day topic
-   scores.
-
-### Optional LLM integration
-
-The agent runs out-of-the-box with a built-in heuristic engine. To
-upgrade question generation and feedback to a real LLM, configure one of:
-
-| Provider | Env vars |
-| --- | --- |
-| OpenAI | `LLM_PROVIDER=openai`, `OPENAI_API_KEY` |
-| Groq | `LLM_PROVIDER=groq`, `GROQ_API_KEY` |
-| Ollama (local) | `LLM_PROVIDER=ollama`, `OLLAMA_BASE_URL` (default `http://localhost:11434`) |
-
-Optional: `LLM_MODEL` overrides the default model.
-If the LLM is unavailable or misbehaves, the agent falls back to the
-heuristic engine automatically.
-
-## API contract
-
-### `POST /api/interview`
-
-Conducts one turn of the interview. Pass the full conversation so far.
-
-Request:
-
-```json
-{
-  "candidate_id": "CAND-003",
-  "session_id": "optional; omit to start a new interview",
-  "conversation": [
-    { "role": "assistant", "content": "First question..." },
-    { "role": "user", "content": "The candidate's answer..." }
-  ]
-}
-```
-
-Responses:
-
-In progress:
-
-```json
-{
-  "status": "IN_PROGRESS",
-  "session_id": "uuid",
-  "question_number": 3,
-  "question": "The next interview question...",
-  "mode": "followup",
-  "day_title": "Prompt Engineering Fundamentals",
-  "covered_days": [7, 8],
-  "remaining_questions": 5
-}
-```
-
-Waiting for answer (when the last message is from the assistant):
-
-```json
-{ "status": "WAITING_FOR_ANSWER", "session_id": "uuid" }
-```
-
-Completed (after ≥ 8 questions across ≥ 4 days):
-
-```json
-{
-  "status": "COMPLETED",
-  "session_id": "uuid",
-  "feedback": {
-    "candidate": "Emily Chen",
-    "overall_score": 84,
-    "strengths": ["..."],
-    "improvements": ["..."],
-    "summary": "...",
-    "topics": { "day_7": { "title": "Prompt Engineering Fundamentals", "score": 88 } }
-  }
-}
-```
-
-### `GET /api/candidates`
-
-Returns candidate profiles for the interview UI.
-
-### `GET /api/health`
-
-Health check.
-
-## AI Usage Log
-
-Every prompt and output is recorded to `PROMPT.md` (JSON lines) and is
-accessible through the app — satisfying the "AI Usage Log must be
-included and accessible" requirement.
-
-**View it live:**
-- `http://127.0.0.1:8000/log.html` — human-readable log page (filter by
-  interviews, LLM calls, or imported chats) with a download button.
-- `GET /api/log` — full log as JSON.
-- `GET /api/log/download` — downloads the raw log as `AI_Usage_Log.txt`.
-- `PROMPT.md` — the underlying JSON-lines file.
-
-**Compliance file (`ai_usage_log.json`):**
-- Every single LLM call is automatically appended to `ai_usage_log.json`
-  (JSON lines) in the project root with a timestamp, model name, provider,
-  the full prompt (`messages`), the raw model response, and an `ok` /
-  `error` status — including failed calls.
-- `GET /api/usage-log` — the compliance log as JSON (counts + models used).
-- `GET /api/usage-log/download` — downloads `ai_usage_log.json`.
-- Model names also appear on each `llm_call` record in `PROMPT.md` and on
-  the log page.
-
-**What gets logged automatically:**
-- `session_start` / `turn` (question) / `answer` / `session_end` — every
-  interview, including past sessions backfilled from `sessions.db`.
-- `llm_call` — full prompt messages + raw response (with model name) for
-  LLM-powered question generation and feedback.
-- `session_complete` — final feedback (score, strengths, improvements).
-
-**Importing chats from other AIs (e.g. Microsoft Copilot):**
-- CLI: `python3 -m import_chat <file.json|transcript.txt> --title "..."`
-- Web: open `/log.html` → **+ Import chat** and paste the conversation.
-- Both accept JSON (`[{role, content}, ...]` or an object with a
-  `messages` key) or plain-text transcripts (`You:` / `Copilot:`
-  markers). Duplicate chats are skipped.
-- Re-sync missing start/end markers anytime: `python3 -m prompt_log`.
-
-**Automatically capturing opencode chats:**
-- A plugin (`.opencode/plugin/opencode-chatlog.ts`) records every opencode
-  session to `PROMPT.md` as an `external_chat` record (one record per
-  session, kept up to date). Restart opencode after any change to the
-  plugin.
-- Past opencode sessions can be backfilled from the local database:
-  `python3 backfill_opencode.py`.
-
-## Deployment (Live Demo URL)
-
-The app is a single FastAPI service (SQLite, static frontend served from
-`frontend/`) and runs anywhere Python runs. The production start command
-binds `0.0.0.0` and honors the platform's `$PORT`:
-
-```bash
-pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}
-```
-
-**Render (recommended, free tier) — blueprint included (`render.yaml`):**
-1. Push this repo to GitHub.
-2. In the Render dashboard: **New → Blueprint** and select the repo.
-3. Render reads `render.yaml` and provisions a free web service
-   (`pip install -r requirements.txt`, then `uvicorn app:app
-   --host 0.0.0.0 --port $PORT`), with `/api/health` as the health check.
-   Python 3.13.5 is pinned via the `.python-version` file at the repo
-   root (Render's Blueprint does not accept a `pythonVersion` field).
-4. Once deployed, use the `https://<service>.onrender.com` URL as your
-   Live Demo URL.
-
-**Railway:**
-1. **New Project → Deploy from GitHub** and pick the repo.
-2. Set the start command to `uvicorn app:app --host 0.0.0.0 --port $PORT`
-   (Railway injects `$PORT` automatically).
-3. Use the generated `https://<project>.up.railway.app` URL.
-
-**Hugging Face Spaces:**
-1. Create a Space (SDK: **Docker**, not Gradio), push the repo there.
-2. Run `uvicorn app:app --host 0.0.0.0 --port 7860` inside the container
-   and expose port 7860.
-3. Use the Space's public URL.
-
-**Verifying the Live URL works:** the demo is functional when all of
-these respond:
-
-- `GET /` → 200 (chat UI)
-- `GET /voice.html` → 200 (voice room)
-- `GET /log.html` → 200 (AI usage log page)
-- `GET /api/health` → `{"status":"ok"}`
-- `GET /api/candidates` → candidate JSON
-- `POST /api/interview` → a next-question or feedback response
-
-**Notes:**
-- `sessions.db` / `PROMPT.md` ship as seed data (pre-existing interviews
-  show up in the log); runtime writes are on the platform's ephemeral
-  disk and reset on redeploy.
-- Optional: set `LLM_PROVIDER` / `OPENAI_API_KEY` (or Groq/Ollama) as
-  environment variables to enable real LLM question generation; the
-  heuristic engine is used automatically otherwise.
-
-## Minimum requirements coverage
-
-- Conversational technical interview — adaptive question engine
-- ≥ 8 questions covering ≥ 4 curriculum days — enforced by planner
-- Follow-ups based on previous responses — answer-aware probing
-- Conversation context maintained — per-session state + history
-- Structured feedback at the end — score, strengths, improvements
-- Required HTTP endpoint — `POST /api/interview`
+1. **Clone the repository and set up a virtual environment:**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
